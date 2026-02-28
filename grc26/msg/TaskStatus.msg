@@ -1,0 +1,4 @@
+bool idle
+bool human_initiation
+bool task_completion
+bool obj_held_by_human

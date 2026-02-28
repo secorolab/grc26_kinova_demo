@@ -10,9 +10,18 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
   <depend>ament_index_cpp</depend>
-  <depend>orocos_kdl</depend>
+  
   <depend>bdd_ros2_interfaces</depend>
+  <depend>robif2b</depend>
+  <depend>coord2b</depend>
+  <depend>orocos_kdl</depend>
+  <depend>geometry_msgs</depend>
+  <depend>kdl_parser</depend>
+  <depend>sensor_msgs</depend>
+  <depend>xacro</depend> 
+
   <build_depend>rosidl_default_generators</build_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
 
@@ -22,5 +31,3 @@
     <build_type>ament_cmake</build_type>
   </export>
 </package>
-
-
