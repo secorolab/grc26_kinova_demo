@@ -1,0 +1,228 @@
+<?xml version="1.0" ?>
+<!-- Table URDF split from pick_place.urdf -->
+<!-- Contains: world, table_base, table_top, 4 legs, and kinova mount cylinders -->
+<robot name="pick_place_table">
+
+  <material name="wood_color">
+    <color rgba="0.8 0.6 0.4 1.0"/>
+  </material>
+
+  <!-- world -->
+  <link name="world"/>
+
+  <!-- Base link at table center on ground -->
+  <link name="table_base">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="4.000000000000001e-08" ixy="0" ixz="0" iyy="4.000000000000001e-08" iyz="0" izz="4.000000000000001e-08"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.01"/>
+      </geometry>
+      <material name="invisible">
+        <color rgba="0 0 0 0"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- Table top -->
+  <link name="table_top">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 -0.035"/>
+      <mass value="62.72000000000002"/>
+      <inertia ixx="3.370677333333335" ixy="0" ixz="0" iyy="13.405877333333342" iyz="0" izz="16.725333333333342"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.035"/>
+      <geometry>
+        <box size="1.6 0.8 0.07"/>
+      </geometry>
+      <material name="wood_color"/>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.035"/>
+      <geometry>
+        <box size="1.6 0.8 0.07"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="table_top_joint" type="fixed">
+    <parent link="table_base"/>
+    <child link="table_top"/>
+    <origin rpy="0 0 0" xyz="0 0 0.74"/>
+  </joint>
+
+  <!-- Table legs -->
+  <link name="table_leg_fl">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <mass value="13.065000000000003"/>
+      <inertia ixx="0.4914617500000002" ixy="0" ixz="0" iyy="0.4914617500000002" iyz="0" izz="0.0054437500000000015"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="table_leg_fl_joint" type="fixed">
+    <parent link="table_base"/>
+    <child link="table_leg_fl"/>
+    <origin rpy="0 0 0" xyz="0.775 0.375 0.67"/>
+  </joint>
+
+  <link name="table_leg_fr">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <mass value="13.065000000000003"/>
+      <inertia ixx="0.4914617500000002" ixy="0" ixz="0" iyy="0.4914617500000002" iyz="0" izz="0.0054437500000000015"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="table_leg_fr_joint" type="fixed">
+    <parent link="table_base"/>
+    <child link="table_leg_fr"/>
+    <origin rpy="0 0 0" xyz="0.775 -0.375 0.67"/>
+  </joint>
+
+  <link name="table_leg_bl">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <mass value="13.065000000000003"/>
+      <inertia ixx="0.4914617500000002" ixy="0" ixz="0" iyy="0.4914617500000002" iyz="0" izz="0.0054437500000000015"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="table_leg_bl_joint" type="fixed">
+    <parent link="table_base"/>
+    <child link="table_leg_bl"/>
+    <origin rpy="0 0 0" xyz="-0.775 0.375 0.67"/>
+  </joint>
+
+  <link name="table_leg_br">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <mass value="13.065000000000003"/>
+      <inertia ixx="0.4914617500000002" ixy="0" ixz="0" iyy="0.4914617500000002" iyz="0" izz="0.0054437500000000015"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 -0.335"/>
+      <geometry>
+        <box size="0.05 0.05 0.67"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="table_leg_br_joint" type="fixed">
+    <parent link="table_base"/>
+    <child link="table_leg_br"/>
+    <origin rpy="0 0 0" xyz="-0.775 -0.375 0.67"/>
+  </joint>
+
+  <!-- Attach table to world -->
+  <joint name="table_fixed" type="fixed">
+    <parent link="world"/>
+    <child link="table_base"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+  </joint>
+
+  <!-- Kinova mount plates (kept here as part of table assembly) -->
+  <link name="kinova1_table_mount">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="kinova2_table_mount">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="kinova1_table_mount_joint" type="fixed">
+    <parent link="table_top"/>
+    <child link="kinova1_table_mount"/>
+    <origin rpy="0 0 0" xyz="-0.72 0.0 0.013"/>
+  </joint>
+
+  <joint name="kinova2_table_mount_joint" type="fixed">
+    <parent link="table_top"/>
+    <child link="kinova2_table_mount"/>
+    <origin rpy="0 0 0" xyz="0.72 0 0.013"/>
+  </joint>
+
+</robot>

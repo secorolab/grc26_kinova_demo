@@ -1,0 +1,108 @@
+#usda 1.0
+(
+    defaultPrim = "FoodTray"
+    metersPerUnit = 1.0
+    upAxis = "Z"
+)
+
+def Xform "FoodTray" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+)
+{
+    float3 xformOp:translate = (0.0, 0.0, 0.0)
+    uniform token[] xformOpOrder = ["xformOp:translate"]
+
+    float physics:mass = 0.3
+
+    # ── Bottom: 18cm x 13.5cm x 0.5cm ───────────────────────────────────────
+    # USD Cube has half-extent=1 per axis, so scale = desired_half_size
+    # 18cm -> half=0.09, 13.5cm -> half=0.0675, 0.5cm -> half=0.0025
+    # Bottom top face sits at Z = +0.0025
+    def Cube "Bottom" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        double size = 1.0
+        float3 xformOp:scale     = (0.09, 0.0675, 0.0025)
+        float3 xformOp:translate = (0.0, 0.0, 0.0025)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        prepend rel material:binding = </FoodTray/Looks/TrayMaterial>
+    }
+
+    # ── Wall Front (+Y): flush with bottom edge ──────────────────────────────
+    # Width=18cm (half=0.09), thickness=0.5cm (half=0.0025), height=3cm (half=0.015)
+    # Y center = bottom half-Y (0.0675) - wall half-thickness (0.0025) ... 
+    # Actually place OUTSIDE: Y center = 0.0675 (aligns outer face at 0.07)
+    # Z center = bottom_top (0.005) + wall_half_height (0.015) = 0.02
+    def Cube "Wall_Front" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        double size = 1.0
+        float3 xformOp:scale     = (0.09, 0.0025, 0.015)
+        float3 xformOp:translate = (0.0, 0.0700, 0.02)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        prepend rel material:binding = </FoodTray/Looks/TrayMaterial>
+    }
+
+    # ── Wall Back (-Y) ───────────────────────────────────────────────────────
+    def Cube "Wall_Back" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        double size = 1.0
+        float3 xformOp:scale     = (0.09, 0.0025, 0.015)
+        float3 xformOp:translate = (0.0, -0.0700, 0.02)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        prepend rel material:binding = </FoodTray/Looks/TrayMaterial>
+    }
+
+    # ── Wall Left (-X): spans between front/back walls ───────────────────────
+    # Depth span = 13.5cm + 2*wall_thickness = 0.135 + 0.01 = 0.145, half=0.0725
+    # X center = -(0.09 + 0.0025) = -0.0925
+    def Cube "Wall_Left" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        double size = 1.0
+        float3 xformOp:scale     = (0.0025, 0.0725, 0.015)
+        float3 xformOp:translate = (-0.0925, 0.0, 0.02)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        prepend rel material:binding = </FoodTray/Looks/TrayMaterial>
+    }
+
+    # ── Wall Right (+X) ──────────────────────────────────────────────────────
+    def Cube "Wall_Right" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        double size = 1.0
+        float3 xformOp:scale     = (0.0025, 0.0725, 0.015)
+        float3 xformOp:translate = (0.0925, 0.0, 0.02)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        prepend rel material:binding = </FoodTray/Looks/TrayMaterial>
+    }
+
+    # ── Material ─────────────────────────────────────────────────────────────
+    def Scope "Looks"
+    {
+        def Material "TrayMaterial"
+        {
+            token outputs:surface.connect = </FoodTray/Looks/TrayMaterial/PBRShader.outputs:surface>
+
+            def Shader "PBRShader"
+            {
+                uniform asset info:glslfx:sourceAsset = @OmniPBR.mdl@
+                uniform token info:implementationSource = "sourceAsset"
+                uniform token info:mdl:sourceAsset:subIdentifier = "OmniPBR"
+
+                color3f inputs:diffuse_color_constant = (0.85, 0.85, 0.83)
+                float inputs:metallic_constant = 0.0
+                float inputs:roughness_constant = 0.5
+                float inputs:specular_level = 0.1
+
+                token outputs:surface
+            }
+        }
+    }
+}
