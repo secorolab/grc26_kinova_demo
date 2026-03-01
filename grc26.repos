@@ -1,0 +1,33 @@
+repositories:
+  bdd_ros2_interfaces:
+    type: git
+    url: https://github.com/minhnh/bdd_ros2_interfaces.git
+    version: main
+  coord-dsl:
+    type: git
+    url: git@github.com:secorolab/coord-dsl.git
+    version: main
+  moveit_client:
+    type: git
+    url: git@github.com:secorolab/kinova_moveit_client.git
+    version: master
+  orocos_kinematics_dynamics:
+    type: git
+    url: git@github.com:secorolab/orocos_kinematics_dynamics.git
+    version: feature/achd_fixed_joint
+  thirdparty/ros2_kortex:
+    type: git
+    url: https://github.com/Kinovarobotics/ros2_kortex.git
+    version: main
+  thirdparty/ros2_robotiq_gripper:
+    type: git
+    url: https://github.com/PickNikRobotics/ros2_robotiq_gripper.git
+    version: main
+  thirdparty/serial:
+    type: git
+    url: https://github.com/tylerjw/serial.git
+    version: ros2
+  thirdparty/topic_based_ros2_control:
+    type: git
+    url: https://github.com/PickNikRobotics/topic_based_ros2_control.git
+    version: main
