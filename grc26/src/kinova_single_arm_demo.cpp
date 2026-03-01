@@ -89,7 +89,7 @@ int main(int argc, char ** argv)
 
   
   auto task_status = std::make_shared<TaskStatus>();
-  auto kinova_fsm = std::make_shared<FSMInterface>(rob);
+  auto fsm_interface = std::make_shared<FSMInterface>(rob);
 
   auto node = std::make_shared<TaskStatusROSNode>(task_status);
   // TODO: initialise action server node here
@@ -113,7 +113,7 @@ int main(int argc, char ** argv)
   auto deadline = now + desired_loop_rate;
 
   while (n < 30000 && !shutting_down.load()){
-    kinova_fsm->run_fsm();
+    fsm_interface->run_fsm();
     printf("hello world grc26 package\n");
     status.human_initiation = false;
     status.task_completion = false;
@@ -121,7 +121,7 @@ int main(int argc, char ** argv)
     task_status->update(status);
     n++;
 
-    if (kinova_fsm->get_current_state() == S_EXIT) {
+    if (fsm_interface->get_current_state() == S_EXIT) {
         LOG_INFO(node, "FSM reached exit state, breaking control loop");
         break;
     }
@@ -135,10 +135,11 @@ int main(int argc, char ** argv)
     }
   }
 
-  // shutdown - TODO: only when it is connected
-  std::cout << "Shutting down arm..." << std::endl;
-  robif2b_kinova_gen3_stop(&rob);
-  robif2b_kinova_gen3_shutdown(&rob);
+  if (fsm_interface->is_in_comm_with_hw() == true) {
+      std::cout << "Shutting down arm..." << std::endl;
+      robif2b_kinova_gen3_stop(&rob);
+      robif2b_kinova_gen3_shutdown(&rob);
+  }
 
   std::cout << "Shutting down node..." << std::endl;
   executor.cancel();

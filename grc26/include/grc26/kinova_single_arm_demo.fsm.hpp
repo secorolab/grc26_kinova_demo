@@ -85,6 +85,16 @@ enum e_events {
     E_M_COLLABORATE_CONFIGURED,
     E_M_RELEASE_OBJECT_CONFIG,
     E_M_RELEASE_OBJECT_CONFIGURED,
+    E_CONFIGURE_EXIT,
+    E_ENTER_CONFIGURE,
+    E_ENTER_IDLE,
+    E_ENTER_EXECUTE,
+    E_ENTER_EXIT,
+    E_ENTER_M_TOUCH_TABLE,
+    E_ENTER_M_SLIDE_ALONG_TABLE,
+    E_ENTER_M_GRASP_OBJECT,
+    E_ENTER_M_COLLABORATE,
+    E_ENTER_M_RELEASE_OBJECT,
     NUM_EVENTS
 };
 
@@ -108,12 +118,14 @@ enum e_transitions {
     T_M_COLLABORATE_EXECUTE,
     T_EXECUTE_M_RELEASE_OBJECT,
     T_M_RELEASE_OBJECT_EXECUTE,
+    T_CONFIGURE_EXIT,
     NUM_TRANSITIONS
 };
 
 // sm reactions
 enum e_reactions {
     R_E_CONFIGURE = 0,
+    R_E_CONFIGURE_EXIT,
     R_E_IDLE_EXECUTE,
     R_E_EXECUTE_IDLE,
     R_E_IDLE_EXIT,
@@ -122,6 +134,7 @@ enum e_reactions {
     R_E_EXECUTE_M_SLIDE_ALONG_TABLE,
     R_E_EXECUTE_M_GRASP_OBJECT,
     R_E_EXECUTE_M_COLLABORATE,
+    R_E_EXECUTE_M_RELEASE_OBJECT,
     R_E_M_TOUCH_TABLE_CONFIGURED,
     R_E_M_SLIDE_ALONG_TABLE_CONFIGURED,
     R_E_M_GRASP_OBJECT_CONFIGURED,
@@ -220,6 +233,10 @@ inline struct transition transitions[NUM_TRANSITIONS] = {
     {
         .startStateIndex = S_M_RELEASE_OBJECT,
         .endStateIndex = S_EXECUTE,
+    }, 
+    {
+        .startStateIndex = S_CONFIGURE,
+        .endStateIndex = S_EXIT,
     } 
 };
 
@@ -228,121 +245,154 @@ inline struct event_reaction reactions[NUM_REACTIONS] = {
     {
         .conditionEventIndex = E_CONFIGURED,
         .transitionIndex = T_CONFIGURE_IDLE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_IDLE 
+        },
+    }, 
+    {
+        .conditionEventIndex = E_CONFIGURE_EXIT,
+        .transitionIndex = T_CONFIGURE_EXIT,
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXIT 
+        },
     }, 
     {
         .conditionEventIndex = E_IDLE_EXECUTE,
         .transitionIndex = T_IDLE_EXECUTE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXECUTE 
+        },
     }, 
     {
         .conditionEventIndex = E_EXECUTE_IDLE,
         .transitionIndex = T_EXECUTE_IDLE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_IDLE 
+        },
     }, 
     {
         .conditionEventIndex = E_IDLE_EXIT,
         .transitionIndex = T_IDLE_EXIT,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXIT 
+        },
     }, 
     {
         .conditionEventIndex = E_EXECUTE_EXIT,
         .transitionIndex = T_EXECUTE_EXIT,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXIT 
+        },
     }, 
     {
         .conditionEventIndex = E_M_TOUCH_TABLE_CONFIG,
         .transitionIndex = T_EXECUTE_M_TOUCH_TABLE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_M_TOUCH_TABLE 
+        },
     }, 
     {
         .conditionEventIndex = E_M_SLIDE_ALONG_TABLE_CONFIG,
         .transitionIndex = T_EXECUTE_M_SLIDE_ALONG_TABLE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_M_SLIDE_ALONG_TABLE 
+        },
     }, 
     {
         .conditionEventIndex = E_M_GRASP_OBJECT_CONFIG,
         .transitionIndex = T_EXECUTE_M_GRASP_OBJECT,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_M_GRASP_OBJECT 
+        },
     }, 
     {
         .conditionEventIndex = E_M_COLLABORATE_CONFIG,
         .transitionIndex = T_EXECUTE_M_COLLABORATE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_M_COLLABORATE 
+        },
+    }, 
+    {
+        .conditionEventIndex = E_M_RELEASE_OBJECT_CONFIG,
+        .transitionIndex = T_EXECUTE_M_RELEASE_OBJECT,
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_M_RELEASE_OBJECT 
+        },
     }, 
     {
         .conditionEventIndex = E_M_TOUCH_TABLE_CONFIGURED,
         .transitionIndex = T_M_TOUCH_TABLE_EXECUTE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXECUTE 
+        },
     }, 
     {
         .conditionEventIndex = E_M_SLIDE_ALONG_TABLE_CONFIGURED,
         .transitionIndex = T_M_SLIDE_ALONG_TABLE_EXECUTE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXECUTE 
+        },
     }, 
     {
         .conditionEventIndex = E_M_GRASP_OBJECT_CONFIGURED,
         .transitionIndex = T_M_GRASP_OBJECT_EXECUTE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXECUTE 
+        },
     }, 
     {
         .conditionEventIndex = E_M_COLLABORATE_CONFIGURED,
         .transitionIndex = T_M_COLLABORATE_EXECUTE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXECUTE 
+        },
     }, 
     {
         .conditionEventIndex = E_M_RELEASE_OBJECT_CONFIGURED,
         .transitionIndex = T_M_RELEASE_OBJECT_EXECUTE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXECUTE 
+        },
     }, 
     {
         .conditionEventIndex = E_STEP,
         .transitionIndex = T_START_CONFIGURE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_CONFIGURE 
+        },
     }, 
     {
         .conditionEventIndex = E_STEP,
         .transitionIndex = T_IDLE_IDLE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_IDLE 
+        },
     }, 
     {
         .conditionEventIndex = E_STEP,
         .transitionIndex = T_EXECUTE_EXECUTE,
-        .numFiredEvents = 0,
-        .firedEventIndices = nullptr,
-
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_ENTER_EXECUTE 
+        },
     } 
 };
 

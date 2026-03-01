@@ -39,13 +39,11 @@
 #include "grc26/pid_controller.hpp"
 #include "grc26/cartesian_motion_setpoint.hpp"
 #include "robif2b/functions/kinova_gen3.h"
+#include "grc26/arm_state.hpp"
 
 #define NUM_JOINTS 7
 
 #define KINOVA_TAU_CMD_LIMIT 30.0
-
-struct ArmState {
-};
 
 
 class FSMInterface
@@ -55,6 +53,7 @@ public:
     ~FSMInterface();
 
     int get_current_state() const;
+    bool is_in_comm_with_hw() const;
 
     // FSM methods
     void configure(events *eventData, ArmState& arm_state);
@@ -72,7 +71,7 @@ public:
 
     void compute_gravity_comp(events *eventData, ArmState& arm_state);
     void compute_cartesian_ctrl(events *eventData, ArmState& arm_state);
-
+    void exit(events *eventData, ArmState& arm_state);
     void run_fsm();
 
 public:
@@ -81,7 +80,7 @@ public:
 private:
     robif2b_kinova_gen3_nbx& rob;
     CartesianMotionSetpoint sp;
-    bool arm_configured_ = false;
+    bool in_comm_with_hw = false;
 
     // KDL members
     KDL::Tree tree;
@@ -101,7 +100,7 @@ private:
     KDL::Twist twist_ee;
     KDL::Frame target_pose_ee;
 
-    ArmState arm_state{};
+    ArmState arm_state;
 };
 
 #endif // FSM_INTERFACE_HPP
