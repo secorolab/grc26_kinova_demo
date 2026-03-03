@@ -5,6 +5,7 @@ import sys
 
 import rclpy
 from rclpy.node import Node
+from rclpy.action.server import ActionServer, CancelResponse
 from rclpy.action.client import ActionClient, ClientGoalHandle
 from rclpy.executors import MultiThreadedExecutor
 import rclpy.time
@@ -25,6 +26,12 @@ from pydantic import BaseModel
 from typing import Optional
 from enum import StrEnum
 
+from bdd_ros2_interfaces.msg import Event, Trinary, TrinaryStamped
+from bdd_ros2_interfaces.action import Behaviour
+
+from rdflib import Namespace
+from rdf_utils.uri import URL_SECORO_M
+
 from coord_dsl.fsm import fsm_step, FSMData
 from coord_dsl.event_loop import (
     produce_event,
@@ -33,6 +40,19 @@ from coord_dsl.event_loop import (
 )
 from models.fsm import create_fsm, EventID, StateID
 
+
+TOPIC_LOCATED_PICK = "/obs_policy/located_at_pick_ws"
+TOPIC_IS_HELD = "/obs_policy/is_held"
+TOPIC_LOCATED_PLACE = "/obs_policy/located_at_place_ws"
+
+NS_M_TMPL = Namespace(f"{URL_SECORO_M}/acceptance-criteria/bdd/templates/")
+
+EXPORTED_EVENTS = {
+    'PICK_START' : NS_M_TMPL["evt-pick-start"],
+    'PICK_END'   : NS_M_TMPL["evt-pick-end"],
+    'PLACE_START': NS_M_TMPL["evt-place-start"],
+    'PLACE_END'  : ["evt-place-end"],
+}
 
 OBJECT_LINK = 'cutting_board_A'
 GRASP_LINK_1 = 'grasp_point_1'
@@ -134,6 +154,9 @@ class DualArmPickPlace(Node):
         self.declare_parameter('ee_link2', DEFAULT_ARM2.ee_link)
         self.declare_parameter('gripper_joint2', DEFAULT_ARM2.gripper_joint)
 
+        self.declare_parameter("event_topic", "/bdd/events")
+        self.declare_parameter("bhv_server_name", "bhv_server")
+
         self.robot = Robot(
             arm1=Manipulator(
                 arm=self.get_parameter('arm1').value,
@@ -172,6 +195,28 @@ class DualArmPickPlace(Node):
         self.arm1_target_pub = self.create_publisher(PoseStamped, 'arm1_target_pose', 10)
         self.arm2_target_pub = self.create_publisher(PoseStamped, 'arm2_target_pose', 10)
 
+        self.bhv_server_name = self.get_parameter("bhv_server_name").value
+
+        self.bhv_action_server = ActionServer(
+            self,
+            Behaviour,
+            self.bhv_server_name,
+            self.bhv_execute_cb,
+            cancel_callback=self.bhv_cancel_cb
+        )
+
+        self.event_topic = self.get_parameter("event_topic").value
+
+        self.evt_pub = self.create_publisher(Event, self.event_topic, 10)
+
+        self.located_pick_pub = self.create_publisher(TrinaryStamped, TOPIC_LOCATED_PICK, 10)
+        self.is_held_pub = self.create_publisher(TrinaryStamped, TOPIC_IS_HELD, 10)
+        self.located_place_pub = self.create_publisher(TrinaryStamped, TOPIC_LOCATED_PLACE, 10)
+
+        self.bhv_ctx_id    = None
+        self.bhv_goal_in   = False
+        self.bhv_goal_done = False
+
         self.get_logger().info('DualArmPickPlace node configured.')
 
     def execute_action(self, ac: ActionClient, af: ActionFuture, goal_msg):
@@ -196,14 +241,14 @@ class DualArmPickPlace(Node):
 
         # send goal
         if af.send_goal_future is None:
-            self.logger.info(f'{ac._action_name}: Sending goal to action server...')
+            # self.logger.info(f'{ac._action_name}: Sending goal to action server...')
             af.send_goal_future = ac.send_goal_async(goal_msg)
             assert af.send_goal_future is not None, "send_goal_future is None"
             return False
 
         # wait for goal to be accepted
         if not af.send_goal_future.done():
-            self.logger.info(f'{ac._action_name}: Waiting for goal to be accepted...')
+            # self.logger.info(f'{ac._action_name}: Waiting for goal to be accepted...')
             return False
 
         if af.goal_handle is None:
@@ -213,7 +258,7 @@ class DualArmPickPlace(Node):
                 af.send_goal_future = None
                 return False
 
-            self.logger.info(f'{ac._action_name}: Goal accepted, waiting for result...')
+            # self.logger.info(f'{ac._action_name}: Goal accepted, waiting for result...')
             af.get_result_future = af.goal_handle.get_result_async()
             return False
 
@@ -223,7 +268,7 @@ class DualArmPickPlace(Node):
             return False
 
         if not af.get_result_future.done():
-            self.logger.info(f'{ac._action_name}: Waiting for result...', throttle_duration_sec=5.0)
+            self.logger.info(f'{ac._action_name}: Waiting for result...', throttle_duration_sec=10.0)
             return False
 
         result = af.get_result_future.result()
@@ -240,6 +285,40 @@ class DualArmPickPlace(Node):
         af.send_goal_future = None
         af.get_result_future = None
         af.goal_handle = None
+
+    def bhv_cancel_cb(self, goal_handle: ClientGoalHandle) -> CancelResponse:
+        self.logger.info('Behavior execution canceled')
+        return CancelResponse.ACCEPT
+
+    def bhv_execute_cb(self, goal_handle: ClientGoalHandle):
+        self.logger.info('Behavior execution started')
+
+        self.bhv_ctx_id = goal_handle.request.scenario_context_id
+        self.bhv_goal_done = False
+
+        response = Behaviour.Result()
+        response.result.scenario_context_id = self.bhv_ctx_id
+        
+        feedback = Behaviour.Feedback()
+        feedback.scenario_context_id = self.bhv_ctx_id
+
+        self.bhv_goal_in = True
+
+        rate = self.create_rate(100)
+        while rclpy.ok() and not self.bhv_goal_done:
+            
+            if goal_handle.is_cancel_requested:
+                self.logger.info('Behavior execution cancel requested')
+                goal_handle.canceled()
+                return Behaviour.Result()
+
+            rate.sleep()
+
+        response.result.stamp   = self.get_clock().now().to_msg()
+        response.result.trinary = Trinary(value=Trinary.TRUE)
+
+        goal_handle.succeed()
+        return response
 
     def _lookup_pose(self, link: str) -> PoseStamped | None:
         try:
@@ -332,8 +411,10 @@ def configure_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     return True
 
 def idle_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
-    ud.m1 = True
-    produce_event(fsm.event_data, EventID.E_M_HOME_CONFIG)
+    if node.bhv_goal_in:
+        ud.m1 = True
+        produce_event(fsm.event_data, EventID.E_M_HOME_CONFIG)
+
     return True
 
 def m_home_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
@@ -391,6 +472,22 @@ def m_touch_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     node.arm1_ac = node.arm1_cart_ac
     node.arm2_ac = node.arm2_cart_ac
 
+    # pub bhv
+    trinary_msg = TrinaryStamped()
+    trinary_msg.stamp = node.get_clock().now().to_msg()
+    trinary_msg.scenario_context_id = node.bhv_ctx_id
+    trinary_msg.trinary.value = Trinary.TRUE
+    node.located_pick_pub.publish(trinary_msg)
+
+    node.logger.info('published located pick message')
+
+    evt_msg = Event()
+    evt_msg.stamp = node.get_clock().now().to_msg()
+    evt_msg.scenario_context_id = node.bhv_ctx_id
+    evt_msg.uri = EXPORTED_EVENTS['PICK_START']
+    node.evt_pub.publish(evt_msg)
+    node.logger.info('published pick start event')
+
     return True
 
 def m_slide_along_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
@@ -416,6 +513,10 @@ def m_slide_along_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace)
     node.arm1_target_pub.publish(k1_target_pose)
     node.arm2_target_pub.publish(k2_target_pose)
 
+    
+
+    
+
     ud.move_arm1 = True
     ud.move_arm2 = True
 
@@ -430,6 +531,14 @@ def m_grasp_object_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     ud.move_arm2 = False
     ud.move_gripper1 = True
     ud.move_gripper2 = True
+
+    evt_msg = Event()
+    evt_msg.stamp = node.get_clock().now().to_msg()
+    evt_msg.scenario_context_id = node.bhv_ctx_id
+    evt_msg.uri = EXPORTED_EVENTS['PICK_END']
+    node.evt_pub.publish(evt_msg)
+    node.logger.info('published pick end event')
+
 
     return True
 
@@ -463,6 +572,22 @@ def m_collaborate_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     ud.move_arm2 = True
     ud.move_gripper1 = False
     ud.move_gripper2 = False
+
+    # pub bhv
+    trinary_msg = TrinaryStamped()
+    trinary_msg.stamp = node.get_clock().now().to_msg()
+    trinary_msg.scenario_context_id = node.bhv_ctx_id
+    trinary_msg.trinary.value = Trinary.TRUE
+    node.is_held_pub.publish(trinary_msg)
+
+    node.logger.info('published is held message')
+
+    evt_msg = Event()
+    evt_msg.stamp = node.get_clock().now().to_msg()
+    evt_msg.scenario_context_id = node.bhv_ctx_id
+    evt_msg.uri = EXPORTED_EVENTS['PLACE_START']
+    node.evt_pub.publish(evt_msg)
+    node.logger.info('published place start event')
 
     return True
 
@@ -519,11 +644,28 @@ def execute_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
             produce_event(fsm.event_data, EventID.E_M_COLLABORATE_CONFIG)
         elif ud.m6:
             ud.m6 = False
-            produce_event(fsm.event_data, EventID.E_EXECUTE_EXIT)
+            # pub bhv
+            trinary_msg = TrinaryStamped()
+            trinary_msg.stamp = node.get_clock().now().to_msg()
+            trinary_msg.scenario_context_id = node.bhv_ctx_id
+            trinary_msg.trinary.value = Trinary.TRUE
+            node.located_place_pub.publish(trinary_msg)
+            node.bhv_goal_done = True
+            
+            node.logger.info('published located place message')
+
+            evt_msg = Event()
+            evt_msg.stamp = node.get_clock().now().to_msg()
+            evt_msg.scenario_context_id = node.bhv_ctx_id
+            evt_msg.uri = EXPORTED_EVENTS['PLACE_END']
+            node.evt_pub.publish(evt_msg)
+            node.logger.info('published place end event')
+
+            produce_event(fsm.event_data, EventID.E_EXECUTE_IDLE)
     return all_done
 
 def generic_on_end(fsm: FSMData, ud: UserData, end_events: list[EventID]):
-    print(f"State '{StateID(fsm.current_state_index).name}' finished")
+    # print(f"State '{StateID(fsm.current_state_index).name}' finished")
     for evt in end_events:
         produce_event(fsm.event_data, evt)
 
