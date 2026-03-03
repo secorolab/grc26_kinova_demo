@@ -48,17 +48,16 @@ ament_export_dependencies(rosidl_default_runtime)
 # ------------------------
 
 add_executable(kinova_single_arm_demo 
-               src/kinova_single_arm_demo.cpp
-               src/constraint_monitors.cpp
-               src/filters.cpp
-               src/fsm_interface.cpp
-               src/pid_controller.cpp
-               src/task_status.cpp
-               src/task_status_node.cpp
-               src/achd_solver.cpp
-               src/arm_kdl_model.cpp
-               src/solver_state_interface.cpp
-               )
+                src/achd_solver.cpp
+                src/arm_kdl_model.cpp
+                src/compute_controller_command.cpp
+                src/filters.cpp
+                src/fsm_interface.cpp
+                src/kinova_single_arm_demo.cpp
+                src/pid_controller.cpp
+                src/task_status_node.cpp
+                )
+
 target_include_directories(kinova_single_arm_demo PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
@@ -77,6 +76,7 @@ ament_target_dependencies(kinova_single_arm_demo
   
 target_link_libraries(kinova_single_arm_demo
   robif2b::kinova_gen3
+  robif2b::robotiq_ft_sensor
   coord2b
   ${orocos_kdl_LIBRARIES}
   )

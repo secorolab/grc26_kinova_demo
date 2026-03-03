@@ -2,6 +2,7 @@
 #define FILTERS_HPP
 
 #include <cmath>
+#include <stdexcept>
 
 class LowPassFilter {
 private:
@@ -14,6 +15,8 @@ public:
     // cutoff_freq: Cutoff frequency in Hz
     // sample_rate: Sampling rate in Hz
     LowPassFilter(double cutoff_freq, double sample_rate);
+
+    LowPassFilter(double alpha);
 
     // Update filter with new raw value
     double update(double raw_value);

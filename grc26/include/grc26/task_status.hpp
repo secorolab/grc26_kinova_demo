@@ -21,9 +21,21 @@ class TaskStatus
 public:
     TaskStatus() = default;
 
-    void update(const TaskStatusData& new_status);
+    void update(const TaskStatusData& new_status)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
 
-    bool getLatest(TaskStatusData& out) const;
+        current_ = new_status;
+        current_.sequence_number = sequence_counter_++;
+        current_.timestamp = std::chrono::high_resolution_clock::now();
+    }
+
+    bool getLatest(TaskStatusData& out) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        out = current_;
+        return true;
+    }
 
 private:
     mutable std::mutex mutex_;

@@ -1,32 +1,34 @@
 #ifndef SOLVER_STATE_INTERFACE_HPP
 #define SOLVER_STATE_INTERFACE_HPP
 
-#include <kdl/jntarray.hpp>
-#include "grc26/system_state.hpp"
+#include "grc26/achd_solver.hpp"
 
 class SolverStateInterface
 {
 public:
-    explicit SolverStateInterface(unsigned int dof);
+  SolverStateInterface(VereshchaginSolver& solver)
+    : solver_(solver)
+  {}
 
-    // Access to solver state
-    KDL::JntArray& q()        { return q_; }
-    KDL::JntArray& qd()       { return qd_; }
-    KDL::JntArray& tauCmd()   { return tau_cmd_; }
+  inline void toSolver(const SystemState& state)
+  {
+    for (unsigned int i = 0; i < solver_.q().rows(); ++i)
+    {
+      solver_.q()(i)   = state.arm.q[i];
+      solver_.qd()(i)  = state.arm.qd[i];
+    }
+  }
 
-    const KDL::JntArray& q() const      { return q_; }
-    const KDL::JntArray& qd() const     { return qd_; }
-    const KDL::JntArray& tauCmd() const { return tau_cmd_; }
-
-    // Mapping
-    void toSolver(const SystemState& state);
-    void fromSolver(SystemState& state) const;
+  inline void fromSolver(SystemState& state) const
+  {
+    for (unsigned int i = 0; i < solver_.tauCmd().rows(); ++i)
+    {
+      state.arm.tau_cmd[i] = solver_.tauCmd()(i);
+    }
+  }
 
 private:
-    KDL::JntArray q_;
-    KDL::JntArray qd_;
-    KDL::JntArray tau_cmd_;
-    unsigned int dof_;
+  VereshchaginSolver& solver_;
 };
 
 #endif // SOLVER_STATE_INTERFACE_HPP

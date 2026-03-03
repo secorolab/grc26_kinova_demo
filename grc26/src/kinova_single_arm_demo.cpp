@@ -14,16 +14,14 @@
 #include "grc26/system_state.hpp"
 #include "grc26/hardware_binding.hpp"
 #include "robif2b/functions/kinova_gen3.h"
+#include "robif2b/functions/robotiq_ft_sensor.h"
 #include "grc26/kinova_single_arm_demo.fsm.hpp"
-
 
 #define LOG_INFO(node, msg, ...) RCLCPP_INFO(node->get_logger(), msg, ##__VA_ARGS__)
 #define LOG_ERROR(node, msg, ...) RCLCPP_ERROR(node->get_logger(), msg, ##__VA_ARGS__)
 
 #define LOG_INFO_S(node, expr) RCLCPP_INFO_STREAM((node)->get_logger(), expr)
 #define LOG_ERROR_S(node, expr) RCLCPP_ERROR_STREAM((node)->get_logger(), expr)
-
-#define NUM_JOINTS 7
 
 std::atomic_bool shutting_down{false};
 
@@ -43,9 +41,11 @@ int main(int argc, char ** argv)
   // --------------------- robot communication setup ---------------------
 
   SystemState system_state;
-  bool success = false;
-  double cycle_time = 0.001;
-  enum robif2b_ctrl_mode ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
+  system_state.gripper.present = false;
+  system_state.arm.present = true;
+  system_state.ft_sensor.present = true;
+  TaskStatusData status;
+
   robif2b_kinova_gen3_nbx arm;
   arm.conf = {
             .ip_address = "192.168.1.10",
@@ -72,9 +72,8 @@ int main(int argc, char ** argv)
   init_options.shutdown_on_signal = false;
   rclcpp::init(argc, argv, init_options);
 
-  
   auto task_status = std::make_shared<TaskStatus>();
-  auto fsm_interface = std::make_shared<FSMInterface>(arm, system_state);
+  auto fsm_interface = std::make_shared<FSMInterface>(system_state, arm, gripper, ft_sensor, status);
 
   auto node = std::make_shared<TaskStatusROSNode>(task_status);
   // TODO: initialise action server node here
@@ -91,7 +90,6 @@ int main(int argc, char ** argv)
   // --------------------- control loop ---------------------
 
   int n = 0;
-  TaskStatusData status;
   constexpr double DT = 0.001; // 1000 Hz control loop
   auto desired_loop_rate = std::chrono::microseconds(static_cast<int>(DT * 1e6));
   auto now = std::chrono::high_resolution_clock::now();
@@ -100,9 +98,6 @@ int main(int argc, char ** argv)
   while (n < 30000 && !shutting_down.load()){
     fsm_interface->run_fsm();
     printf("hello world grc26 package\n");
-    status.human_initiation = false;
-    status.task_completion = false;
-    status.obj_held_by_human = false;
     task_status->update(status);
     n++;
 
@@ -123,8 +118,8 @@ int main(int argc, char ** argv)
   if (fsm_interface->is_in_comm_with_hw() == true) {
     if (system_state.ft_sensor.present) {
       std::cout << "Stopping FT sensor..." << std::endl;
-    //   robif2b_robotiq_ft_stop(&ft_sensor);
-    //   robif2b_robotiq_ft_shutdown(&ft_sensor);
+      robif2b_robotiq_ft_stop(&ft_sensor);
+      robif2b_robotiq_ft_shutdown(&ft_sensor);
     }
     if (system_state.gripper.present) {
       std::cout << "Stopping gripper..." << std::endl;

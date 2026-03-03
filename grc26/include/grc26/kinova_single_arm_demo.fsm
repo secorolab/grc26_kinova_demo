@@ -52,9 +52,6 @@ TRANSITIONS:
     T_CONFIGURE_IDLE:
         FROM: @S_CONFIGURE
         TO: @S_IDLE
-    T_IDLE_IDLE:
-        FROM: @S_IDLE
-        TO: @S_IDLE
     T_IDLE_EXECUTE:
         FROM: @S_IDLE
         TO: @S_EXECUTE
@@ -176,8 +173,8 @@ REACTIONS:
         FIRES: @E_ENTER_CONFIGURE
     R_E_STEP_IDLE:
         WHEN: @E_STEP
-        DO: @T_IDLE_IDLE
-        FIRES: @E_ENTER_IDLE
+        DO: @T_IDLE_EXECUTE
+        FIRES: @E_ENTER_EXECUTE
     R_E_STEP_EXECUTE:
         WHEN: @E_STEP
         DO: @T_EXECUTE_EXECUTE

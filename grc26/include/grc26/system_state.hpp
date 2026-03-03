@@ -7,6 +7,7 @@
 #include <chrono>
 #include "robif2b/functions/kinova_gen3.h"
 #include "robif2b/functions/robotiq_ft_sensor.h"
+#include "kdl/frames.hpp"
 
 constexpr unsigned int ARM_DOF = 7;
 
@@ -23,7 +24,7 @@ struct SystemState
 
   struct ArmData
   {
-    double cycle_time;
+    double cycle_time = 0.001;
 
     double q[ARM_DOF]         = {0.0};
     double q_cmd[ARM_DOF]     = {0.0};
@@ -41,6 +42,9 @@ struct SystemState
 
     double imu_ang_vel_msr[3] = {0.0};
     double imu_lin_acc_msr[3] = {0.0};
+
+    KDL::Frame pose_ee_BL;
+    KDL::Twist twist_ee_BL;
 
     bool success              = false;
     bool present              = true;
@@ -61,9 +65,9 @@ struct SystemState
 
   struct FTData
   {
-    float fx, fy, fz, tx, ty, tz;
+    float fx, fy, fz, tx, ty, tz = 0.0;
     float wrench[6];
-    bool new_data;
+    bool new_data = false;
     bool success = false;
     enum robif2b_robotiq_ft_state ft_state;
     bool present = true;

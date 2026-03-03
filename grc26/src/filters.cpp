@@ -8,6 +8,14 @@ LowPassFilter::LowPassFilter(double cutoff_freq, double sample_rate)
     alpha_ = dt / (rc + dt);
 }
 
+LowPassFilter::LowPassFilter(double alpha)
+    : alpha_(alpha), filtered_value_(0.0), initialized_(false)
+{
+    if (alpha_ <= 0.0 || alpha_ > 1.0) {
+        throw std::invalid_argument("Alpha must be in the range (0, 1]");
+    }
+}
+
 double LowPassFilter::update(double raw_value)
 {
     if (!initialized_) {

@@ -102,7 +102,6 @@ enum e_events {
 enum e_transitions {
     T_START_CONFIGURE = 0,
     T_CONFIGURE_IDLE,
-    T_IDLE_IDLE,
     T_IDLE_EXECUTE,
     T_IDLE_EXIT,
     T_EXECUTE_EXECUTE,
@@ -168,10 +167,6 @@ inline struct transition transitions[NUM_TRANSITIONS] = {
     }, 
     {
         .startStateIndex = S_CONFIGURE,
-        .endStateIndex = S_IDLE,
-    }, 
-    {
-        .startStateIndex = S_IDLE,
         .endStateIndex = S_IDLE,
     }, 
     {
@@ -380,10 +375,10 @@ inline struct event_reaction reactions[NUM_REACTIONS] = {
     }, 
     {
         .conditionEventIndex = E_STEP,
-        .transitionIndex = T_IDLE_IDLE,
+        .transitionIndex = T_IDLE_EXECUTE,
         .numFiredEvents = 1,
         .firedEventIndices = new unsigned int[1]{
-            E_ENTER_IDLE 
+            E_ENTER_EXECUTE 
         },
     }, 
     {

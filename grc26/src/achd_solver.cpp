@@ -7,16 +7,17 @@ VereshchaginSolver::VereshchaginSolver(const ArmKDLModel& model)
 
 void VereshchaginSolver::setAlpha(const KDL::Jacobian& alpha)
 {
-  if (alpha.columns() != num_constraints_)
-    throw std::runtime_error("Alpha dimension mismatch");
-  alpha_ = alpha;
+    if (alpha.columns() != num_constraints_)
+        throw std::runtime_error("Alpha dimension mismatch");
+
+    alpha_ = alpha;
 }
 
 bool VereshchaginSolver::initialize(unsigned int num_constraints)
 {
   num_constraints_ = num_constraints;
-  dof_          = model_.num_joints();
-  num_segments_ = model_.num_segments();
+  dof_             = model_.num_joints();
+  num_segments_    = model_.num_segments();
 
   if (dof_ == 0)
   {
@@ -24,7 +25,7 @@ bool VereshchaginSolver::initialize(unsigned int num_constraints)
     return false;
   }
 
-  // Preallocate joint arrays
+  // allocate solver state variables
   q_       = KDL::JntArray(dof_);
   qd_      = KDL::JntArray(dof_);
   qdd_     = KDL::JntArray(dof_);
@@ -34,6 +35,8 @@ bool VereshchaginSolver::initialize(unsigned int num_constraints)
 
   alpha_ = KDL::Jacobian(num_constraints_);
   f_ext_ = KDL::Wrenches(num_segments_);
+
+  // gravity vector from model
   KDL::Vector gravity_vec = model_.gravity();
 
   // Gravity twist. As solver expects gravity to be in the negative direction, the gravity vector is negated here.
@@ -57,21 +60,12 @@ bool VereshchaginSolver::initialize(unsigned int num_constraints)
   return true;
 }
 
-int VereshchaginSolver::computeTorques(SystemState& system_state,
-                                       KDL::JntArray& tau_out)
+int VereshchaginSolver::computeTorques()
 {
   if (!initialized_)
     return -1;
 
-  // Copy state into preallocated arrays
-  for (unsigned int i = 0; i < dof_; ++i)
-  {
-    q_(i)   = system_state.arm.q[i];
-    qd_(i)  = system_state.arm.qd[i];
-    qdd_(i) = system_state.arm.qdd[i];
-  }
-
-  int r = solver_->CartToJnt(q_,
+  return solver_->CartToJnt(q_,
                             qd_,
                             qdd_,
                             alpha_,
@@ -79,9 +73,4 @@ int VereshchaginSolver::computeTorques(SystemState& system_state,
                             f_ext_,
                             ff_taus_,
                             tau_cmd_);
-  for (unsigned int i = 0; i < 7; ++i) {
-    system_state.arm.tau_cmd[i] = tau_cmd_(i);
-  }
-
-  return r;
 }
