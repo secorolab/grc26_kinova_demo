@@ -63,11 +63,11 @@
     </group_state>
     <group_state name="home" group="kinova1">
         <joint name="kinova1_joint_1" value="0"/>
-        <joint name="kinova1_joint_2" value="0.2599"/>
+        <joint name="kinova1_joint_2" value="0.2104"/>
         <joint name="kinova1_joint_3" value="0"/>
-        <joint name="kinova1_joint_4" value="2.57"/>
+        <joint name="kinova1_joint_4" value="2.2292"/>
         <joint name="kinova1_joint_5" value="0"/>
-        <joint name="kinova1_joint_6" value="-1.2817"/>
+        <joint name="kinova1_joint_6" value="-0.87"/>
         <joint name="kinova1_joint_7" value="-1.57"/>
     </group_state>
     <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
