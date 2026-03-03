@@ -1,0 +1,33 @@
+%YAML 1.2
+---
+launch:
+  - node:
+      pkg: "moveit_client"
+      exec: "client_node"
+      name: "kinova1_client"
+      param:
+        - name: "arm"
+          value: "kinova1"
+        - name: "gripper"
+          value: "g1"
+        - name: "max_vel_sf"
+          value: 0.5
+        - name: "max_acc_sf"
+          value: 0.5
+
+  # - node:
+  #     pkg: "moveit_client"
+  #     exec: "client_node"
+  #     name: "kinova2_client"
+  #     param:
+  #       - name: "arm"
+  #         value: "kinova2"
+  #       - name: "gripper"
+  #         value: "g2"
+  #       - name: "max_vel_sf"
+  #         value: "0.5"
+  #       - name: "max_acc_sf"
+  #         value: "0.5"
+  #
+  # - include:
+  #     file: "$(find-pkg-share grc26_kinova_moveit_config)/launch/demo.launch.py"

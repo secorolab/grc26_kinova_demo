@@ -32,6 +32,7 @@ setup(
         ('share/' + package_name + '/models', glob(os_join('models', '*'))),
         ('share/' + package_name + '/scripts', glob(os_join('scripts', '*'))),
         ('share/' + package_name + '/config', glob(os_join('config', '*'))),
+        ('share/' + package_name + '/urdf', glob(os_join('urdf', '*'))),
         *get_data_files('assets', 'share/' + package_name + '/assets'),
     ],
     install_requires=['setuptools'],

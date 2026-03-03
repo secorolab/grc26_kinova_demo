@@ -64,7 +64,7 @@ class TransitionID(IntEnum):
     T_EXECUTE_EXECUTE = auto()
     T_EXECUTE_IDLE = auto()
     T_EXECUTE_EXIT = auto()
-    T_EXECUTE_M_TOUCH_TABLE = auto()
+    T_IDLE_M_TOUCH_TABLE = auto()
     T_M_TOUCH_TABLE_EXECUTE = auto()
     T_EXECUTE_M_SLIDE_ALONG_TABLE = auto()
     T_M_SLIDE_ALONG_TABLE_EXECUTE = auto()
@@ -106,7 +106,7 @@ def create_fsm() -> FSMData:
         TransitionID.T_EXECUTE_EXECUTE: Transition(StateID.S_EXECUTE, StateID.S_EXECUTE),
         TransitionID.T_EXECUTE_IDLE: Transition(StateID.S_EXECUTE, StateID.S_IDLE),
         TransitionID.T_EXECUTE_EXIT: Transition(StateID.S_EXECUTE, StateID.S_EXIT),
-        TransitionID.T_EXECUTE_M_TOUCH_TABLE: Transition(StateID.S_EXECUTE, StateID.S_M_TOUCH_TABLE),
+        TransitionID.T_IDLE_M_TOUCH_TABLE: Transition(StateID.S_IDLE, StateID.S_M_TOUCH_TABLE),
         TransitionID.T_M_TOUCH_TABLE_EXECUTE: Transition(StateID.S_M_TOUCH_TABLE, StateID.S_EXECUTE),
         TransitionID.T_EXECUTE_M_SLIDE_ALONG_TABLE: Transition(StateID.S_EXECUTE, StateID.S_M_SLIDE_ALONG_TABLE),
         TransitionID.T_M_SLIDE_ALONG_TABLE_EXECUTE: Transition(StateID.S_M_SLIDE_ALONG_TABLE, StateID.S_EXECUTE),
@@ -146,7 +146,7 @@ def create_fsm() -> FSMData:
         ),
         ReactionID.R_E_EXECUTE_M_TOUCH_TABLE: EventReaction(
             condition_event_index=EventID.E_M_TOUCH_TABLE_CONFIG,
-            transition_index=TransitionID.T_EXECUTE_M_TOUCH_TABLE,
+            transition_index=TransitionID.T_IDLE_M_TOUCH_TABLE,
             fired_event_indices=[],
         ),
         ReactionID.R_E_EXECUTE_M_SLIDE_ALONG_TABLE: EventReaction(

@@ -1,0 +1,183 @@
+<?xml version="1.0"?>
+
+<robot name="gen3_2f_85_pick_place" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- arguments -->
+  <xacro:arg name="use_fake_hardware" default="false" />
+  <xacro:arg name="fake_sensor_commands" default="false" />
+  <xacro:arg name="robot_ip" default="" />
+  <xacro:arg name="gripper_joint_name" default="" />
+  <xacro:arg name="prefix_1" default="kinova1_" />
+  <xacro:arg name="prefix_2" default="kinova2_" />
+  
+  <xacro:property name="PI" value="3.14159265359" />
+
+
+  <!-- parameters -->
+  <xacro:property name="arm" value="gen3" />
+  <xacro:property name="dof" value="7" />
+  <xacro:property name="gripper" value="robotiq_2f_85" />
+  <xacro:property name="username" default="admin" />
+  <xacro:property name="password" default="admin" />
+  <xacro:property name="port" default="10000" />
+  <xacro:property name="port_realtime" default="10001" />
+  <xacro:property name="session_inactivity_timeout_ms" default="60000" />
+  <xacro:property name="connection_inactivity_timeout_ms" default="2000" />
+  
+  <!-- table parameters -->
+  <xacro:property name="table_prefix" value="table" />
+  <xacro:property name="table_leg_height" value="0.67" />
+  <xacro:property name="table_leg_length" value="0.05" />
+  <xacro:property name="table_leg_breadth" value="0.05" />
+  <xacro:property name="table_top_thickness" value="0.07" />
+  <xacro:property name="table_top_length" value="2.0" />
+  <xacro:property name="table_top_breadth" value="1.2" />
+
+  <material name="wood_color">
+    <color rgba="0.8 0.6 0.4 1.0"/>
+  </material>
+
+  <xacro:property name="material_wood_color" value="wood_color" />
+
+  <!-- includes -->
+  <xacro:include filename="$(find kortex_description)/robots/kortex_robot.xacro" />
+  <xacro:include filename="$(find grc26_isaacsim_task)/urdf/table.xacro" />
+
+  <!-- world -->
+  <link name="world"/>
+
+  <!-- table -->
+  <xacro:table prefix="${table_prefix}"
+    parent="world"
+    leg_height="${table_leg_height}"
+    leg_length="${table_leg_length}"
+    leg_breadth="${table_leg_breadth}"
+    top_thickness="${table_top_thickness}"
+    top_length="${table_top_length}"
+    top_breadth="${table_top_breadth}"
+    top_material="${material_wood_color}" >
+
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:table>
+
+  <!-- kinova table mount -->
+  <link name="$(arg prefix_1)table_mount">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="$(arg prefix_2)table_mount">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.026" radius="0.08"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <!-- robot origin wrt table top center -->
+  <xacro:property name="$(arg prefix_1)mount_origin_x" value="-${table_top_length/2 - 0.085}" />
+  <xacro:property name="$(arg prefix_1)mount_origin_y" value="0.0" />
+  <xacro:property name="$(arg prefix_1)mount_origin_z" value="0.013" />
+  <xacro:property name="$(arg prefix_1)robot_origin_yaw" value="0.0" />
+
+  <xacro:property name="$(arg prefix_2)mount_origin_x" value="${table_top_length/2 - 0.085}" />
+  <xacro:property name="$(arg prefix_2)mount_origin_y" value="0.0" />
+  <xacro:property name="$(arg prefix_2)mount_origin_z" value="0.013" />
+  <xacro:property name="$(arg prefix_2)robot_origin_yaw" value="-${PI}" />
+
+  <joint name="$(arg prefix_1)table_mount_joint" type="fixed">
+    <parent link="${table_prefix}_top"/>
+    <child link="$(arg prefix_1)table_mount"/>
+    <origin xyz="${$(arg prefix_1)mount_origin_x} ${$(arg prefix_1)mount_origin_y} ${$(arg prefix_1)mount_origin_z}" rpy="0 0 0"/>
+  </joint>
+  
+  <joint name="$(arg prefix_2)table_mount_joint" type="fixed">
+    <parent link="${table_prefix}_top"/>
+    <child link="$(arg prefix_2)table_mount"/>
+    <origin xyz="${$(arg prefix_2)mount_origin_x} ${$(arg prefix_2)mount_origin_y} ${$(arg prefix_2)mount_origin_z}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- robot -->
+  <xacro:load_robot
+    arm="${arm}"
+    dof="${dof}"
+    gripper="${gripper}"
+    prefix="$(arg prefix_1)"
+    parent="$(arg prefix_1)table_mount"
+    vision="true"
+    use_fake_hardware="$(arg use_fake_hardware)"
+    fake_sensor_commands="$(arg fake_sensor_commands)"
+    robot_ip="$(arg robot_ip)"
+    username="${username}"
+    password="${password}"
+    port="${port}"
+    port_realtime="${port_realtime}"
+    session_inactivity_timeout_ms="${session_inactivity_timeout_ms}"
+    connection_inactivity_timeout_ms="${connection_inactivity_timeout_ms}"
+    gripper_joint_name="$(arg gripper_joint_name)"
+    use_internal_bus_gripper_comm="true">
+    <origin xyz="0 0 ${0.026/2}" rpy="0 0 ${$(arg prefix_1)robot_origin_yaw}"/>
+  </xacro:load_robot>
+  <xacro:load_robot
+    arm="${arm}"
+    dof="${dof}"
+    gripper="${gripper}"
+    prefix="$(arg prefix_2)"
+    parent="$(arg prefix_2)table_mount"
+    vision="true"
+    use_fake_hardware="$(arg use_fake_hardware)"
+    fake_sensor_commands="$(arg fake_sensor_commands)"
+    robot_ip="$(arg robot_ip)"
+    username="${username}"
+    password="${password}"
+    port="${port}"
+    port_realtime="${port_realtime}"
+    session_inactivity_timeout_ms="${session_inactivity_timeout_ms}"
+    connection_inactivity_timeout_ms="${connection_inactivity_timeout_ms}"
+    gripper_joint_name="$(arg gripper_joint_name)"
+    use_internal_bus_gripper_comm="true">
+    <origin xyz="0 0 ${0.026/2}" rpy="0 0 ${$(arg prefix_2)robot_origin_yaw}"/>
+  </xacro:load_robot>
+
+  <!-- robotiq 2f-85 length parameters -->
+  <xacro:property name="robotiq_85_base_tip_open_length" value="0.1489" />
+  <xacro:property name="robotiq_85_base_tip_closed_length" value="0.1628" />
+
+  <!-- robotiq 2f-85 grasp link -->
+  <link name="$(arg prefix_1)robotiq_85_grasp_link" />
+  <joint name="$(arg prefix_1)robotiq_85_grasp_joint" type="fixed">
+    <parent link="$(arg prefix_1)robotiq_85_base_link"/>
+    <child link="$(arg prefix_1)robotiq_85_grasp_link"/>
+    <origin rpy="0 0 0" xyz="0 0 ${robotiq_85_base_tip_open_length}"/>
+  </joint>
+  <link name="$(arg prefix_2)robotiq_85_grasp_link" />
+  <joint name="$(arg prefix_2)robotiq_85_grasp_joint" type="fixed">
+    <parent link="$(arg prefix_2)robotiq_85_base_link"/>
+    <child link="$(arg prefix_2)robotiq_85_grasp_link"/>
+    <origin rpy="0 0 0" xyz="0 0 ${robotiq_85_base_tip_open_length}"/>
+  </joint>
+
+
+</robot>

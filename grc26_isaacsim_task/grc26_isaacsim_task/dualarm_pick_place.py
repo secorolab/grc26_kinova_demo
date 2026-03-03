@@ -10,7 +10,7 @@ from rclpy.executors import MultiThreadedExecutor
 import rclpy.time
 import rclpy.duration
 
-from moveit_client.action import MoveToCartesianPose, GripperCommand
+from moveit_client.action import MoveToPose, MoveToCartesianPose, GripperCommand
 
 from geometry_msgs.msg import Pose, PoseStamped
 from std_msgs.msg import String
@@ -74,10 +74,19 @@ class UserData(BaseModel):
     move_arm2: bool                       = False
     move_gripper1: bool                   = False
     move_gripper2: bool                   = False
-    arm1_target_wps: list[Pose]           = []
-    arm2_target_wps: list[Pose]           = []
+    arm1_done: bool                       = False
+    arm2_done: bool                       = False
+    g1_done: bool                         = False
+    g2_done: bool                         = False
+    arm1_target_pose: Pose                = None
+    arm2_target_pose: Pose                = None
     arm1_gripper_open: bool               = True
     arm2_gripper_open: bool               = True
+
+    m1: bool                              = False
+    m2: bool                              = False
+    m3: bool                              = False
+    m4: bool                              = False
     
     class Config:
         arbitrary_types_allowed = True
@@ -113,15 +122,18 @@ class DualArmPickPlace(Node):
             )
         )
     
-        arm1_action_name = f'/{self.robot.arm1.arm}/move_to_cartesian_pose'
-        arm2_action_name = f'/{self.robot.arm2.arm}/move_to_cartesian_pose'
+        arm1_action_name = f'/{self.robot.arm1.arm}/move_to_pose'
+        arm2_action_name = f'/{self.robot.arm2.arm}/move_to_pose'
         g1_action_name   = f'/{self.robot.arm1.gripper}/gripper_command'
         g2_action_name   = f'/{self.robot.arm2.gripper}/gripper_command'
         
-        self.arm1_ac = ActionClient(self, MoveToCartesianPose, arm1_action_name)
-        self.arm2_ac = ActionClient(self, MoveToCartesianPose, arm2_action_name)
+        self.arm1_ac = ActionClient(self, MoveToPose, arm1_action_name)
+        self.arm2_ac = ActionClient(self, MoveToPose, arm2_action_name)
         self.g1_ac   = ActionClient(self, GripperCommand, g1_action_name)
         self.g2_ac   = ActionClient(self, GripperCommand, g2_action_name)
+
+        self.arm1_target_pub = self.create_publisher(PoseStamped, 'arm1_target_pose', 10)
+        self.arm2_target_pub = self.create_publisher(PoseStamped, 'arm2_target_pose', 10)
 
         self.get_logger().info('DualArmPickPlace node configured.')
 
@@ -147,38 +159,38 @@ class DualArmPickPlace(Node):
 
         # send goal
         if af.send_goal_future is None:
-            self.logger.info('Sending goal to action server...')
+            self.logger.info(f'{ac._action_name}: Sending goal to action server...')
             af.send_goal_future = ac.send_goal_async(goal_msg)
             assert af.send_goal_future is not None, "send_goal_future is None"
             return False
 
         # wait for goal to be accepted
         if not af.send_goal_future.done():
-            self.logger.info('Waiting for goal to be accepted...')
+            self.logger.info(f'{ac._action_name}: Waiting for goal to be accepted...')
             return False
 
         if af.goal_handle is None:
             af.goal_handle = af.send_goal_future.result()
             if not af.goal_handle or not af.goal_handle.accepted:
-                self.logger.error("Goal rejected")
+                self.logger.error(f'{ac._action_name}: Goal rejected')
                 af.send_goal_future = None
                 return False
 
-            self.logger.info("Goal accepted")
+            self.logger.info(f'{ac._action_name}: Goal accepted, waiting for result...')
             af.get_result_future = af.goal_handle.get_result_async()
             return False
 
         # wait for result
         if af.get_result_future is None:
-            self.logger.warning("get_result_future unexpectedly None")
+            self.logger.warning(f'{ac._action_name}: get_result_future is None')
             return False
 
         if not af.get_result_future.done():
-            self.logger.info("Waiting for result...", throttle_duration_sec=5.0)
+            self.logger.info(f'{ac._action_name}: Waiting for result...', throttle_duration_sec=5.0)
             return False
 
         result = af.get_result_future.result()
-        self.logger.info(f'Action result: {result.result}')
+        self.logger.info(f'{ac._action_name}: Action result: {result.result}')
         
         # reset action future for next use
         self.reset_action_future(af)
@@ -212,21 +224,15 @@ class DualArmPickPlace(Node):
         pose.pose.orientation = tf.transform.rotation
         return pose
 
-    def get_move_arm_msg(self, str, waypoints: list[list[float]]):
-        msg = MoveToCartesianPose.Goal()
+    def get_move_arm_msg(self, target_pose:Pose) -> MoveToPose.Goal:
+        msg = MoveToPose.Goal()
 
-        for wp in waypoints:
-            pose = PoseStamped()
-            pose.header.frame_id = 'world'
-            pose.header.stamp = self.get_clock().now().to_msg()
-            pose.pose.position.x = wp[0]
-            pose.pose.position.y = wp[1]
-            pose.pose.position.z = wp[2]
-            pose.pose.orientation.x = wp[3]
-            pose.pose.orientation.y = wp[4]
-            pose.pose.orientation.z = wp[5]
-            pose.pose.orientation.w = wp[6]
-            msg.waypoints.append(pose)
+        pose = PoseStamped()
+        pose.header.frame_id = 'world'
+        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.pose = target_pose
+        msg.target_pose = pose
+
         return msg
 
     def get_gripper_cmd_msg(self, position: float):
@@ -234,30 +240,33 @@ class DualArmPickPlace(Node):
         msg.gripper_width = position
         return msg
 
-    def move_arm(self, af: ActionFuture, waypoints: list[list[float]]):
-        move_arm_msg = self.get_move_arm_msg(waypoints)
+    def move_arm(self, ac: ActionClient,
+                 af: ActionFuture, target_pose: Pose):
+        move_arm_msg = self.get_move_arm_msg(target_pose)
         # send goal to arm
-        if not self.execute_action(self.move_to_pose_ac, af, move_arm_msg):
+        if not self.execute_action(ac, af, move_arm_msg):
             return False
 
         return True
 
-    def gripper_control(self, af, open: bool):
+    def gripper_control(self, ac, af, open: bool):
         val = 0.0 if open else 0.8
+        print(f"Gripper command: {'OPEN' if open else 'CLOSE'} (width={val})")
 
         gripper_msg = self.get_gripper_cmd_msg(val)
         # send goal to gripper
-        if not self.execute_action(self.gripper_ac, af, gripper_msg):
+        if not self.execute_action(ac, af, gripper_msg):
             return False
 
         return True
     
 def configure_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
-    # node.configure()
+    node.configure()
     return True
 
 def idle_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
-    produce_event(fsm.event_data, EventID.E_IDLE_EXIT)
+    ud.m1 = True
+    produce_event(fsm.event_data, EventID.E_M_TOUCH_TABLE_CONFIG)
     return True
 
 def m_touch_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
@@ -268,17 +277,21 @@ def m_touch_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     if k1_target_pose is None or k2_target_pose is None:
         node.get_logger().error('Failed to lookup target poses')
         return False
-    
+
     # adjust to be behind the object for grasping
-    approach_offset = 0.1  # 10 cm
+    approach_offset = 0.075  # 10 cm
     k1_target_pose.pose.position.x -= approach_offset
-    k2_target_pose.pose.position.x -= approach_offset
+    k2_target_pose.pose.position.x += approach_offset
 
-    ud.arm1_target_wps.clear()
-    ud.arm2_target_wps.clear()
+    k1_target_pose.pose.position.z += 0.0
+    k2_target_pose.pose.position.z += 0.0
+    
+    ud.arm1_target_pose = k1_target_pose.pose
+    ud.arm2_target_pose = k2_target_pose.pose
 
-    ud.arm1_target_wps.extend(k1_target_pose.pose)
-    ud.arm2_target_wps.extend(k2_target_pose.pose)
+    # publish target poses for visualization/debugging
+    node.arm1_target_pub.publish(k1_target_pose)
+    node.arm2_target_pub.publish(k2_target_pose)
 
     ud.move_arm1 = True
     ud.move_arm2 = True
@@ -293,11 +306,11 @@ def m_slide_along_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace)
         node.get_logger().error('Failed to lookup target poses')
         return False
 
-    ud.arm1_target_wps.clear()
-    ud.arm2_target_wps.clear()
+    ud.arm1_target_pose = k1_target_pose.pose
+    ud.arm2_target_pose = k2_target_pose.pose
 
-    ud.arm1_target_wps.append(k1_target_pose.pose)
-    ud.arm2_target_wps.append(k2_target_pose.pose)
+    node.arm1_target_pub.publish(k1_target_pose)
+    node.arm2_target_pub.publish(k2_target_pose)
 
     ud.move_arm1 = True
     ud.move_arm2 = True
@@ -328,11 +341,8 @@ def m_collaborate_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     k1_target_pose.pose.position.z += 0.2
     k2_target_pose.pose.position.z += 0.2
 
-    ud.arm1_target_wps.clear()
-    ud.arm2_target_wps.clear()
-
-    ud.arm1_target_wps.append(k1_target_pose.pose)
-    ud.arm2_target_wps.append(k2_target_pose.pose)
+    ud.arm1_target_pose = k1_target_pose.pose
+    ud.arm2_target_pose = k2_target_pose.pose
 
     ud.move_arm1 = True
     ud.move_arm2 = True
@@ -342,24 +352,47 @@ def m_collaborate_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     return True
 
 def execute_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
-    arm1_done = False
-    arm2_done = False
-    g1_done = False
-    g2_done = False
+    if ud.move_arm1 and not ud.arm1_done:
+        ud.arm1_done = node.move_arm(node.arm1_ac, ud.arm1_af, ud.arm1_target_pose)
+    if ud.move_arm2 and not ud.arm2_done:
+        ud.arm2_done = node.move_arm(node.arm2_ac, ud.arm2_af, ud.arm2_target_pose)
+    if ud.move_gripper1 and not ud.g1_done:
+        ud.g1_done = node.gripper_control(node.g1_ac, ud.g1_af, ud.arm1_gripper_open)
+    if ud.move_gripper2 and not ud.g2_done:
+        ud.g2_done = node.gripper_control(node.g2_ac, ud.g2_af, ud.arm2_gripper_open)
 
-    if ud.move_arm1:
-        arm1_done = node.move_arm(ud.arm1_af, ud.arm1_target_wps)
-    if ud.move_arm2:
-        arm2_done = node.move_arm(ud.arm2_af, ud.arm2_target_wps)
-    if ud.move_gripper1:
-        g1_done = node.gripper_control(ud.g1_af, ud.arm1_gripper_open)
-    if ud.move_gripper2:
-        g2_done = node.gripper_control(ud.g2_af, ud.arm2_gripper_open)
+    all_done = (
+        (not ud.move_arm1    or ud.arm1_done) and
+        (not ud.move_arm2    or ud.arm2_done) and
+        (not ud.move_gripper1 or ud.g1_done)  and
+        (not ud.move_gripper2 or ud.g2_done)
+    )
+    if all_done:
+        # reset for next step
+        ud.move_arm1 = False
+        ud.move_arm2 = False
+        ud.move_gripper1 = False
+        ud.move_gripper2 = False
+        ud.arm1_done = False
+        ud.arm2_done = False
+        ud.g1_done = False
+        ud.g2_done = False
 
-    return (arm1_done or not ud.move_arm1) and \
-           (arm2_done or not ud.move_arm2) and \
-           (g1_done or not ud.move_gripper1) and \
-           (g2_done or not ud.move_gripper2)
+        if ud.m1:
+            ud.m1 = False
+            ud.m2 = True
+            produce_event(fsm.event_data, EventID.E_M_SLIDE_ALONG_TABLE_CONFIG)
+        elif ud.m2:
+            ud.m2 = False
+            ud.m3 = True
+            produce_event(fsm.event_data, EventID.E_M_GRASP_OBJECT_CONFIG)
+        elif ud.m3:
+            ud.m3 = False
+            ud.m4 = True
+            produce_event(fsm.event_data, EventID.E_M_COLLABORATE_CONFIG)
+        elif ud.m4:
+            ud.m4 = False
+    return all_done
 
 def generic_on_end(fsm: FSMData, ud: UserData, end_events: list[EventID]):
     print(f"State '{StateID(fsm.current_state_index).name}' finished")
@@ -382,31 +415,31 @@ FSM_BHV = {
     StateID.S_M_TOUCH_TABLE: {
         "step": m_touch_table_step,
         "on_end": lambda fsm, ud, node: generic_on_end(
-            fsm, ud, [EventID.E_M_TOUCH_TABLE_DONE]
+            fsm, ud, [EventID.E_M_TOUCH_TABLE_CONFIGURED]
         ),
     },
     StateID.S_M_SLIDE_ALONG_TABLE: {
         "step": m_slide_along_table_step,
         "on_end": lambda fsm, ud, node: generic_on_end(
-            fsm, ud, [EventID.E_M_SLIDE_ALONG_TABLE_DONE]
+            fsm, ud, [EventID.E_M_SLIDE_ALONG_TABLE_CONFIGURED]
         ),
     },
     StateID.S_M_GRASP_OBJECT: {
         "step": m_grasp_object_step,
         "on_end": lambda fsm, ud, node: generic_on_end(
-            fsm, ud, [EventID.E_M_GRASP_OBJECT_DONE]
+            fsm, ud, [EventID.E_M_GRASP_OBJECT_CONFIGURED]
         ),
     },
     StateID.S_M_COLLABORATE: {
         "step": m_collaborate_step,
         "on_end": lambda fsm, ud, node: generic_on_end(
-            fsm, ud, [EventID.E_M_COLLABORATE_DONE]
+            fsm, ud, [EventID.E_M_COLLABORATE_CONFIGURED]
         ),
     },
     StateID.S_EXECUTE: {
         "step": execute_step,
         "on_end": lambda fsm, ud, node: generic_on_end(
-            fsm, ud, [EventID.E_EXECUTE_DONE]
+            fsm, ud, [EventID.E_STEP]
         ),
     },
 }
@@ -440,9 +473,12 @@ def main(args=None):
     ud = UserData()
     fsm = create_fsm()
 
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+
     while rclpy.ok():
-        rclpy.spin_once(node, timeout_sec=0.01)
-        
+        executor.spin_once(timeout_sec=0.01)
+
         if fsm.current_state_index == StateID.S_EXIT:
             node.get_logger().info("Exiting FSM loop.")
             break
@@ -454,6 +490,7 @@ def main(args=None):
         reconfig_event_buffers(fsm.event_data)
         fsm_step(fsm)
 
+    executor.shutdown()
     node.destroy_node()
     rclpy.shutdown()
 

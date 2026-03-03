@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<robot name="table" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- Table macro -->
+  <xacro:macro name="table" params="
+      prefix
+      parent
+      leg_height
+      leg_length
+      leg_breadth
+      top_thickness
+      top_length
+      top_breadth
+      top_material
+      top_density:=700
+      leg_density:=7800
+      base_mass:=0.001
+      *origin
+    ">
+
+    <!-- Derived masses + inertias -->
+    <xacro:property name="top_volume" value="${top_length * top_breadth * top_thickness}"/>
+    <xacro:property name="top_mass"   value="${top_density * top_volume}"/>
+
+    <xacro:property name="leg_volume" value="${leg_length * leg_breadth * leg_height}"/>
+    <xacro:property name="leg_mass"   value="${leg_density * leg_volume}"/>
+
+    <!-- Base link at table center on ground -->
+    <link name="${prefix}_base">
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <!-- sphere inertia: I = 2/5 m r^2 -->
+        <mass value="${base_mass}"/>
+        <inertia ixx="${(2.0/5.0) * base_mass * 0.01 * 0.01}"
+                 ixy="0" ixz="0"
+                 iyy="${(2.0/5.0) * base_mass * 0.01 * 0.01}"
+                 iyz="0"
+                 izz="${(2.0/5.0) * base_mass * 0.01 * 0.01}"/>
+      </inertial>
+
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <sphere radius="0.01"/> <!-- tiny marker sphere -->
+        </geometry>
+        <material name="invisible">
+          <color rgba="0 0 0 0"/>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Table top -->
+    <link name="${prefix}_top">
+      <inertial>
+        <!-- COM at center of the box geometry -->
+        <origin xyz="0 0 -${top_thickness/2}" rpy="0 0 0"/>
+        <mass value="${top_mass}"/>
+        <!-- box inertia about COM -->
+        <inertia ixx="${top_mass * (top_breadth*top_breadth + top_thickness*top_thickness) / 12.0}"
+                 ixy="0" ixz="0"
+                 iyy="${top_mass * (top_length*top_length  + top_thickness*top_thickness) / 12.0}"
+                 iyz="0"
+                 izz="${top_mass * (top_length*top_length  + top_breadth*top_breadth) / 12.0}"/>
+      </inertial>
+
+      <visual>
+        <origin xyz="0 0 -${top_thickness/2}" rpy="0 0 0"/>
+        <geometry>
+          <box size="${top_length} ${top_breadth} ${top_thickness}"/>
+        </geometry>
+        <material name="${top_material}"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 -${top_thickness/2}" rpy="0 0 0"/>
+        <geometry>
+          <box size="${top_length} ${top_breadth} ${top_thickness}"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <joint name="${prefix}_top_joint" type="fixed">
+      <parent link="${prefix}_base"/>
+      <child link="${prefix}_top"/>
+      <origin xyz="0 0 ${leg_height + top_thickness}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Leg offsets -->
+    <xacro:property name="leg_x" value="${top_length/2 - leg_length/2}"/>
+    <xacro:property name="leg_y" value="${top_breadth/2 - leg_breadth/2}"/>
+
+    <!-- Macro for each leg -->
+    <xacro:macro name="table_leg" params="prefix leg_name x y leg_height leg_length leg_breadth leg_mass">
+      <link name="${prefix}_${leg_name}">
+        <inertial>
+          <!-- COM at center of the box geometry -->
+          <origin xyz="0 0 ${-leg_height/2}" rpy="0 0 0"/>
+          <mass value="${leg_mass}"/>
+          <!-- box inertia about COM -->
+          <inertia ixx="${leg_mass * (leg_breadth*leg_breadth + leg_height*leg_height) / 12.0}"
+                   ixy="0" ixz="0"
+                   iyy="${leg_mass * (leg_length*leg_length  + leg_height*leg_height) / 12.0}"
+                   iyz="0"
+                   izz="${leg_mass * (leg_length*leg_length  + leg_breadth*leg_breadth) / 12.0}"/>
+        </inertial>
+
+        <visual>
+          <origin xyz="0 0 ${-leg_height/2}" rpy="0 0 0"/>
+          <geometry>
+            <box size="${leg_length} ${leg_breadth} ${leg_height}"/>
+          </geometry>
+          <material name="grey">
+            <color rgba="0.5 0.5 0.5 1.0"/>
+          </material>
+        </visual>
+        <collision>
+          <origin xyz="0 0 ${-leg_height/2}" rpy="0 0 0"/>
+          <geometry>
+            <box size="${leg_length} ${leg_breadth} ${leg_height}"/>
+          </geometry>
+        </collision>
+      </link>
+
+      <!-- Joint placed at leg top -->
+      <joint name="${prefix}_${leg_name}_joint" type="fixed">
+        <parent link="${prefix}_base"/>
+        <child link="${prefix}_${leg_name}"/>
+        <origin xyz="${x} ${y} ${leg_height}" rpy="0 0 0"/>
+      </joint>
+    </xacro:macro>
+
+    <!-- Four legs -->
+    <xacro:table_leg prefix="${prefix}" leg_name="leg_fl" x="${ leg_x}"  y="${ leg_y}"  leg_height="${leg_height}" leg_length="${leg_length}" leg_breadth="${leg_breadth}" leg_mass="${leg_mass}"/>
+    <xacro:table_leg prefix="${prefix}" leg_name="leg_fr" x="${ leg_x}"  y="${-leg_y}"  leg_height="${leg_height}" leg_length="${leg_length}" leg_breadth="${leg_breadth}" leg_mass="${leg_mass}"/>
+    <xacro:table_leg prefix="${prefix}" leg_name="leg_bl" x="${-leg_x}"  y="${ leg_y}"  leg_height="${leg_height}" leg_length="${leg_length}" leg_breadth="${leg_breadth}" leg_mass="${leg_mass}"/>
+    <xacro:table_leg prefix="${prefix}" leg_name="leg_br" x="${-leg_x}"  y="${-leg_y}"  leg_height="${leg_height}" leg_length="${leg_length}" leg_breadth="${leg_breadth}" leg_mass="${leg_mass}"/>
+
+    <!-- Attach base to parent -->
+    <joint name="${prefix}_fixed" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}_base"/>
+      <xacro:insert_block name="origin"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>
