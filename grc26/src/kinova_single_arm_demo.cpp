@@ -42,7 +42,7 @@ int main(int argc, char ** argv)
   SystemState system_state;
   system_state.gripper.present = false;
   system_state.arm.present = true;
-  system_state.ft_sensor.present = true;
+  system_state.ft_sensor.present = false;
   TaskStatusData status;
 
   robif2b_kinova_gen3_nbx arm;
@@ -88,18 +88,18 @@ int main(int argc, char ** argv)
 
   // --------------------- control loop ---------------------
 
-  int n = 0;
   constexpr double DT = 0.001; // 1000 Hz control loop
   auto desired_loop_rate = std::chrono::microseconds(static_cast<int>(DT * 1e6));
   auto now = std::chrono::high_resolution_clock::now();
   auto deadline = now + desired_loop_rate;
 
-  while (n < 300 && !shutting_down.load()){
+  while (!shutting_down.load()){
     fsm_interface->run_fsm();
-    printf("hello world grc26 package %d\n", n);
     task_status->update(status);
-    n++;
 
+    // print current time
+    auto now_time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    LOG_INFO(node, "Current time: %ld ms", now_time);
     if (fsm_interface->get_current_state() == S_EXIT) {
       LOG_INFO(node, "FSM reached exit state, breaking control loop");
       break;

@@ -1,5 +1,7 @@
 #include "grc26/fsm_interface.hpp"
 
+#define KINOVA_TAU_CMD_LIMIT 30.0
+
 FSMInterface::FSMInterface(SystemState& system_state,
                            robif2b_kinova_gen3_nbx& rob, 
                            robif2b_kg3_robotiq_gripper_nbx& gripper,
@@ -61,34 +63,64 @@ void FSMInterface::configure(events *eventData, SystemState& system_state){
   compute_ctr_cmd_obj.setGains(config.controllers());
 
   // establish communication with arm
-  robif2b_kinova_gen3_configure(&rob);
-  if (!rob.success) {
-      printf("Error during gen3_configure\n");
-      robif2b_kinova_gen3_shutdown(&rob);
-      if (!rob.success) {
-          printf("Error during gen3_shutdown\n");
-          produce_event(eventData, E_CONFIGURE_EXIT);
-          return;
-      }
+  if (system_state.arm.present){
+    robif2b_kinova_gen3_configure(&rob);
+    if (!rob.success) {
+        printf("Error during gen3_configure\n");
+        robif2b_kinova_gen3_shutdown(&rob);
+        if (!rob.success) {
+            printf("Error during gen3_shutdown\n");
+            produce_event(eventData, E_CONFIGURE_EXIT);
+            return;
+        }
+    }
+
+    robif2b_kinova_gen3_recover(&rob);
+    if (!rob.success) {
+        printf("Error during gen3_recover\n");
+        robif2b_kinova_gen3_shutdown(&rob);
+        if (!rob.success) {
+            printf("Error during gen3_shutdown\n");
+            produce_event(eventData, E_CONFIGURE_EXIT);
+            return;
+        }
+    }
+
+    printf("Starting\n");
+    robif2b_kinova_gen3_start(&rob);
+    if (!rob.success) {
+        printf("Error during gen3_start\n");
+        robif2b_kinova_gen3_stop(&rob);
+        printf("Stopped\n");
+    }
   }
 
-  robif2b_kinova_gen3_recover(&rob);
-  if (!rob.success) {
-      printf("Error during gen3_recover\n");
-      robif2b_kinova_gen3_shutdown(&rob);
-      if (!rob.success) {
-          printf("Error during gen3_shutdown\n");
-          produce_event(eventData, E_CONFIGURE_EXIT);
-          return;
-      }
+  if (system_state.ft_sensor.present) {
+    robif2b_robotiq_ft_configure(&ft_sensor);
+    if (!ft_sensor.success) {
+        printf("Error during ft_sensor configure\n");
+        robif2b_robotiq_ft_shutdown(&ft_sensor);
+        if (!ft_sensor.success) {
+            printf("Error during ft_sensor shutdown\n");
+            produce_event(eventData, E_CONFIGURE_EXIT);
+            return;
+        }
+    }
+    robif2b_robotiq_ft_start(&ft_sensor);
+    if (!ft_sensor.success) {
+        printf("Error during ft_sensor start\n");
+        robif2b_robotiq_ft_stop(&ft_sensor);
+        printf("Stopped ft sensor\n");
+    }
   }
 
-  printf("Starting\n");
-  robif2b_kinova_gen3_start(&rob);
-  if (!rob.success) {
-      printf("Error during gen3_start\n");
-      robif2b_kinova_gen3_stop(&rob);
-      printf("Stopped\n");
+  if (system_state.gripper.present) {
+    robif2b_kg3_robotiq_gripper_start(&gripper);
+    if (!gripper.success) {
+        printf("Error during gripper start\n");
+        robif2b_kg3_robotiq_gripper_stop(&gripper);
+        printf("Stopped gripper\n");
+    }
   }
 
   in_comm_with_hw = true;
@@ -113,6 +145,8 @@ void FSMInterface::idle(events *eventData, const SystemState& system_state){
   */
   compute_ctr_cmd_obj.setGains(config.controllers());
   task_spec.resetDefault();
+
+  produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
 
   task_spec.ee_linear.enabled = true;
   task_spec.ee_linear.mode[0] = LinearMode::Position;
@@ -242,7 +276,17 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
 
   if (condition_met)
   {
+    if (fsm.currentStateIndex == S_M_TOUCH_TABLE)
+      produce_event(eventData, E_ENTER_EXIT);
+      // produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
+    else if (fsm.currentStateIndex == S_M_SLIDE_ALONG_TABLE)
+      produce_event(eventData, E_M_GRASP_OBJECT_CONFIG);
+    else if (fsm.currentStateIndex == S_M_GRASP_OBJECT)
       produce_event(eventData, E_ENTER_IDLE);
+    else if (fsm.currentStateIndex == S_M_COLLABORATE)
+      produce_event(eventData, E_M_RELEASE_OBJECT_CONFIG);
+    else if (fsm.currentStateIndex == S_M_RELEASE_OBJECT)
+      produce_event(eventData, E_ENTER_EXIT);
   }
 }
 
@@ -272,14 +316,14 @@ void FSMInterface::touch_table_behavior_config(events *eventData, SystemState& s
   task_spec.post_condition.constraints[0].type = ConstraintType::Position;
   task_spec.post_condition.constraints[0].axis = 2; // z-axis
   task_spec.post_condition.constraints[0].op = CompareOp::LessEqual;
-  task_spec.post_condition.constraints[0].value = 0.02; // m
+  task_spec.post_condition.constraints[0].value = 0.05; // m
 
   task_spec.post_condition.constraints[1].type = ConstraintType::Velocity;
   task_spec.post_condition.constraints[1].axis = 2; // z-axis
   task_spec.post_condition.constraints[1].op = CompareOp::LessEqual;
   task_spec.post_condition.constraints[1].value = 0.01; // m/s
 
-  produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIGURED);
+  produce_event(eventData, E_M_TOUCH_TABLE_CONFIGURED);
 }
 
 void FSMInterface::slide_on_table_behavior_config(events *eventData, SystemState& system_state){
@@ -315,7 +359,7 @@ void FSMInterface::slide_on_table_behavior_config(events *eventData, SystemState
   task_spec.post_condition.constraints[1].op = CompareOp::LessEqual;
   task_spec.post_condition.constraints[1].value = 0.01; // m/s
 
-  produce_event(eventData, E_M_TOUCH_TABLE_CONFIGURED);
+  produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIGURED);
 }
 
 void FSMInterface::grasp_object_behavior_config(events *eventData, SystemState& system_state){
