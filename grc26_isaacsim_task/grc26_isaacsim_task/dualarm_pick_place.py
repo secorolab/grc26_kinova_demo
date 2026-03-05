@@ -40,6 +40,9 @@ from coord_dsl.event_loop import (
 )
 from models.fsm import create_fsm, EventID, StateID
 
+from simulation_interfaces.srv import ResetSimulation
+from simulation_interfaces.msg import Result as SimResult
+
 
 TOPIC_LOCATED_PICK = "/obs_policy/located_at_pick_ws"
 TOPIC_IS_HELD = "/obs_policy/is_held"
@@ -51,7 +54,7 @@ EXPORTED_EVENTS = {
     'PICK_START' : NS_M_TMPL["evt-pick-start"],
     'PICK_END'   : NS_M_TMPL["evt-pick-end"],
     'PLACE_START': NS_M_TMPL["evt-place-start"],
-    'PLACE_END'  : ["evt-place-end"],
+    'PLACE_END'  : NS_M_TMPL["evt-place-end"],
 }
 
 OBJECT_LINK = 'cutting_board_A'
@@ -139,6 +142,11 @@ class DualArmPickPlace(Node):
     def __init__(self):
         super().__init__('dual_arm_pick_place')
         self.logger = self.get_logger()
+        
+        self.reset_simulation_service = self.create_client(ResetSimulation, 'reset_simulation')
+        while not self.reset_simulation_service.wait_for_service(timeout_sec=1.0):
+            self.logger.warning('Waiting for reset_simulation service...')
+        self.reset_simulation_request = ResetSimulation.Request()
         self.logger.info('DualArmPickPlace node started.')
 
     def configure(self):
@@ -414,6 +422,13 @@ def idle_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     if node.bhv_goal_in:
         ud.m1 = True
         produce_event(fsm.event_data, EventID.E_M_HOME_CONFIG)
+    else:
+        reset_future = node.reset_simulation_service.call_async(node.reset_simulation_request)
+        while not reset_future.done():
+            rclpy.spin_once(node)
+        if reset_future.result().result.result != SimResult.RESULT_OK:
+            node.logger.error('Failed to reset simulation')
+        node.bhv_goal_done = True
 
     return True
 
@@ -660,6 +675,7 @@ def execute_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
             evt_msg.uri = EXPORTED_EVENTS['PLACE_END']
             node.evt_pub.publish(evt_msg)
             node.logger.info('published place end event')
+            node.bhv_goal_in = False
 
             produce_event(fsm.event_data, EventID.E_EXECUTE_IDLE)
     return all_done
