@@ -59,8 +59,9 @@ public:
                           TaskStatusData& status);
   ~FSMInterface();
 
-  int get_current_state() const;
-  bool is_in_comm_with_hw() const;
+  int get_current_state() const { return fsm.currentStateIndex; }
+  bool is_in_comm_with_hw() const { return in_comm_with_hw; }
+  e_states get_fsm_execution_state() const { return fsm_execution_state; }
 
   // FSM methods
   void configure(events *eventData, SystemState& system_state);
@@ -95,6 +96,7 @@ private:
   ComputeControllerCommand compute_ctr_cmd_obj;
 
   bool in_comm_with_hw;
+  e_states fsm_execution_state;
 
   std::unique_ptr<ArmKDLModel> model_;
   std::unique_ptr<VereshchaginSolver> solver_;

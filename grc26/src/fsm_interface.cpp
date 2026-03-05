@@ -19,16 +19,6 @@ FSMInterface::FSMInterface(SystemState& system_state,
 FSMInterface::~FSMInterface() {
 }
 
-int FSMInterface::get_current_state() const
-{
-    return fsm.currentStateIndex;
-}
-
-bool FSMInterface::is_in_comm_with_hw() const
-{
-    return in_comm_with_hw;
-}
-
 void FSMInterface::configure(events *eventData, SystemState& system_state){
 
   // initialise KDL model of the arm from URDF
@@ -124,13 +114,19 @@ void FSMInterface::configure(events *eventData, SystemState& system_state){
   }
 
   in_comm_with_hw = true;
-  // emit event to transition to idle state after configuration
+
   produce_event(eventData, E_CONFIGURED);
 }
 
 void FSMInterface::idle(events *eventData, const SystemState& system_state){
 
+  // TODO: this is to test the touch table behavior, event to start will be triggered by action server
+  produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
+
+  // TODO: update task_status accordingly throughout the behaviors
   task_status.idle = true;
+  fsm_execution_state = S_IDLE;
+
   robif2b_kinova_gen3_update(&rob);
   if (system_state.ft_sensor.present)
   {
@@ -145,8 +141,6 @@ void FSMInterface::idle(events *eventData, const SystemState& system_state){
   */
   compute_ctr_cmd_obj.setGains(config.controllers());
   task_spec.resetDefault();
-
-  produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
 
   task_spec.ee_linear.enabled = true;
   task_spec.ee_linear.mode[0] = LinearMode::Position;
@@ -168,9 +162,9 @@ void FSMInterface::idle(events *eventData, const SystemState& system_state){
   task_spec.orientation.rpy[2] = yaw; // yaw
 
   // TODO: POST condition for task status
-  // If force spike observed when holding tray: human_initiation = true
-  // If persistent constant force equal to object weight observed when holding tray: obj_held_by_human = fals
-  // If object reaches desired position: task_completion = true
+  /* If force spike observed when holding tray: human_initiation = true
+     If persistent constant force equal to object weight observed when holding tray: obj_held_by_human = false
+     If object reaches desired position: task_completion = true */
 
 
 }
@@ -189,19 +183,31 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
   solver_->computeTorques();
   solver_->updateTorqueCmdInState(system_state);
 
-  // send control commands to robot
+  // set zero torque
+  for (int i = 0; i < NUM_JOINTS; ++i)
+  {
+    system_state.arm.tau_cmd[i] = 0.0;
+  }
+
+  // send control commands to arm and update arm_kinematics state
   robif2b_kinova_gen3_update(&rob);
   arm_kinematics_->update(system_state);
 
+  // send gripper command if enabled in task spec and gripper is present
   if (task_spec.gripper.enabled)
   {
-    if (task_spec.gripper.enabled)
+    if (system_state.gripper.present)
     {
       system_state.gripper.pos_cmd[0] = task_spec.gripper.position;
+      robif2b_kg3_robotiq_gripper_update(&gripper);
     }
-    robif2b_kg3_robotiq_gripper_update(&gripper);
+    else
+    {
+      printf("Gripper command specified but gripper not present\n");
+    }
   }
 
+  // update FT sensor readings if present
   if (system_state.ft_sensor.present)
   {
     robif2b_robotiq_ft_update(&ft_sensor);
@@ -276,22 +282,47 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
 
   if (condition_met)
   {
-    if (fsm.currentStateIndex == S_M_TOUCH_TABLE)
+    printf("Post condition met\n");
+    if (fsm_execution_state == S_M_TOUCH_TABLE){
+      produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
+      printf("Completed touch table behavior\n");
+    }
+    else if (fsm_execution_state == S_M_SLIDE_ALONG_TABLE){
+      printf("Completed slide along table behavior\n");
+      if (system_state.gripper.present) {
+          produce_event(eventData, E_M_GRASP_OBJECT_CONFIG);
+        }
+      else {
+        // if no gripper, transition to idle after slide on table
+        produce_event(eventData, E_ENTER_IDLE);
+      }
+    }
+    else if (fsm_execution_state == S_M_GRASP_OBJECT){
+      printf("Completed grasp object behavior\n");
+      if (system_state.gripper.present) {
+        produce_event(eventData, E_ENTER_IDLE);
+      }
+    }
+    else if (fsm_execution_state == S_M_COLLABORATE){
+      printf("Completed collaborate behavior\n");
+      if (system_state.gripper.present) {
+          produce_event(eventData, E_M_RELEASE_OBJECT_CONFIG);
+        }
+      else {
+        // if no gripper, transition to exit after collaborate
+        produce_event(eventData, E_ENTER_EXIT);
+      }
+    }
+    else if (fsm_execution_state == S_M_RELEASE_OBJECT){
+      printf("Completed release object behavior\n");
       produce_event(eventData, E_ENTER_EXIT);
-      // produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
-    else if (fsm.currentStateIndex == S_M_SLIDE_ALONG_TABLE)
-      produce_event(eventData, E_M_GRASP_OBJECT_CONFIG);
-    else if (fsm.currentStateIndex == S_M_GRASP_OBJECT)
-      produce_event(eventData, E_ENTER_IDLE);
-    else if (fsm.currentStateIndex == S_M_COLLABORATE)
-      produce_event(eventData, E_M_RELEASE_OBJECT_CONFIG);
-    else if (fsm.currentStateIndex == S_M_RELEASE_OBJECT)
-      produce_event(eventData, E_ENTER_EXIT);
+    }
   }
 }
 
 void FSMInterface::touch_table_behavior_config(events *eventData, SystemState& system_state){
   
+  fsm_execution_state = S_M_TOUCH_TABLE;
   compute_ctr_cmd_obj.setGains(config.controllers());
   task_spec.resetDefault();
   task_spec.ee_linear.enabled = true;
@@ -314,12 +345,12 @@ void FSMInterface::touch_table_behavior_config(events *eventData, SystemState& s
   task_spec.post_condition.logic = LogicOp::And;
 
   task_spec.post_condition.constraints[0].type = ConstraintType::Position;
-  task_spec.post_condition.constraints[0].axis = 2; // z-axis
+  task_spec.post_condition.constraints[0].axis = 2;     // z-axis
   task_spec.post_condition.constraints[0].op = CompareOp::LessEqual;
   task_spec.post_condition.constraints[0].value = 0.05; // m
 
   task_spec.post_condition.constraints[1].type = ConstraintType::Velocity;
-  task_spec.post_condition.constraints[1].axis = 2; // z-axis
+  task_spec.post_condition.constraints[1].axis = 2;     // z-axis
   task_spec.post_condition.constraints[1].op = CompareOp::LessEqual;
   task_spec.post_condition.constraints[1].value = 0.01; // m/s
 
@@ -328,6 +359,7 @@ void FSMInterface::touch_table_behavior_config(events *eventData, SystemState& s
 
 void FSMInterface::slide_on_table_behavior_config(events *eventData, SystemState& system_state){
 
+  fsm_execution_state = S_M_SLIDE_ALONG_TABLE;
   compute_ctr_cmd_obj.setGains(config.controllers());
   task_spec.resetDefault();
   task_spec.ee_linear.enabled = true;
@@ -350,20 +382,21 @@ void FSMInterface::slide_on_table_behavior_config(events *eventData, SystemState
   task_spec.post_condition.logic = LogicOp::And;
 
   task_spec.post_condition.constraints[0].type = ConstraintType::Position;
-  task_spec.post_condition.constraints[0].axis = 2; // z-axis
+  task_spec.post_condition.constraints[0].axis = 0; // x-axis
   task_spec.post_condition.constraints[0].op = CompareOp::LessEqual;
-  task_spec.post_condition.constraints[0].value = 0.02; // m
+  task_spec.post_condition.constraints[0].value = 0.6; // m
 
-  task_spec.post_condition.constraints[1].type = ConstraintType::Velocity;
+  task_spec.post_condition.constraints[1].type = ConstraintType::Position;
   task_spec.post_condition.constraints[1].axis = 2; // z-axis
   task_spec.post_condition.constraints[1].op = CompareOp::LessEqual;
-  task_spec.post_condition.constraints[1].value = 0.01; // m/s
+  task_spec.post_condition.constraints[1].value = 0.03; // m
 
   produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIGURED);
 }
 
 void FSMInterface::grasp_object_behavior_config(events *eventData, SystemState& system_state){
 
+  fsm_execution_state = S_M_GRASP_OBJECT;
   compute_ctr_cmd_obj.setGains(config.controllers());
   task_spec.resetDefault();
   task_spec.gripper.enabled = true;
@@ -382,15 +415,25 @@ void FSMInterface::grasp_object_behavior_config(events *eventData, SystemState& 
 
 void FSMInterface::collaborate_behavior_config(events *eventData, SystemState& system_state){
 
+  fsm_execution_state = S_M_COLLABORATE;
   compute_ctr_cmd_obj.setGains(config.controllers());
   task_spec.resetDefault();
-  // TODO
-  
+  // TODO: define collaborate behavior spec
+
+  task_spec.post_condition.available = true;
+  task_spec.post_condition.num_constraints = 1;
+
+  task_spec.post_condition.constraints[0].type = ConstraintType::Position;
+  task_spec.post_condition.constraints[0].axis = 2; // z-axis
+  task_spec.post_condition.constraints[0].op = CompareOp::LessEqual;
+  task_spec.post_condition.constraints[0].value = 0.03; // m
+
   produce_event(eventData, E_M_COLLABORATE_CONFIGURED);
 }
 
 void FSMInterface::release_object_behavior_config(events *eventData, SystemState& system_state){
   
+  fsm_execution_state = S_M_RELEASE_OBJECT;
   compute_ctr_cmd_obj.setGains(config.controllers());
   task_spec.resetDefault();
   task_spec.gripper.enabled = true;
@@ -409,6 +452,7 @@ void FSMInterface::release_object_behavior_config(events *eventData, SystemState
 
 void FSMInterface::exit(events *eventData, SystemState& system_state){
 
+  fsm_execution_state = S_EXIT;
   // stop the arm and shutdown communication
   if (in_comm_with_hw == true) {
     if (system_state.ft_sensor.present) {
@@ -431,7 +475,7 @@ void FSMInterface::exit(events *eventData, SystemState& system_state){
   in_comm_with_hw = false;
 }
 
-// decision of which behavior to execute based on events and arm state
+// decision of which behavior to execute based on events
 void FSMInterface::fsm_behavior(events *eventData, SystemState& system_state){
 
   if (consume_event(eventData, E_ENTER_IDLE)) {

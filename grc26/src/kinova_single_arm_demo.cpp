@@ -2,6 +2,8 @@
 #include <atomic>
 #include <csignal>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <memory>
 #include <thread>
 
@@ -88,29 +90,67 @@ int main(int argc, char ** argv)
 
   // --------------------- control loop ---------------------
 
-  constexpr double DT = 0.001; // 1000 Hz control loop
-  auto desired_loop_rate = std::chrono::microseconds(static_cast<int>(DT * 1e6));
-  auto now = std::chrono::high_resolution_clock::now();
-  auto deadline = now + desired_loop_rate;
+  constexpr auto desired_loop_period = std::chrono::microseconds(1000);  // 1000 Hz control loop
+  constexpr double desired_period_us = 1000.0;
+
+  auto last_cycle_time = std::chrono::steady_clock::now();
+  auto next_cycle_time = last_cycle_time + desired_loop_period;
+  auto last_stats_log_time = last_cycle_time;
+  std::uint64_t cycles_since_stats_log = 0;
+  double max_abs_jitter_us = 0.0;
 
   while (!shutting_down.load()){
     fsm_interface->run_fsm();
     task_status->update(status);
 
-    // print current time
-    auto now_time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    LOG_INFO(node, "Current time: %ld ms", now_time);
     if (fsm_interface->get_current_state() == S_EXIT) {
       LOG_INFO(node, "FSM reached exit state, breaking control loop");
       break;
     }
 
-    while (now < deadline) {
-      std::this_thread::sleep_for(std::chrono::microseconds(1000)); // sleep for 1 ms to avoid busy waiting
-      now = std::chrono::high_resolution_clock::now();
+    std::this_thread::sleep_until(next_cycle_time);
+    const auto now = std::chrono::steady_clock::now();
+
+    const auto dt_us = std::chrono::duration<double, std::micro>(now - last_cycle_time).count();
+    const auto abs_jitter_us = std::abs(dt_us - desired_period_us);
+    max_abs_jitter_us = std::max(max_abs_jitter_us, abs_jitter_us);
+
+    ++cycles_since_stats_log;
+    const auto stats_elapsed = now - last_stats_log_time;
+    if (stats_elapsed >= std::chrono::seconds(1)) {
+      const auto elapsed_s = std::chrono::duration<double>(stats_elapsed).count();
+      const auto freq_hz = static_cast<double>(cycles_since_stats_log) / elapsed_s;
+      LOG_INFO(node,
+               "Control loop: %.1f Hz (target 1000.0), max abs jitter: %.1f us",
+               freq_hz,
+               max_abs_jitter_us);
+      // log current state of FSM
+      const auto current_state = fsm_interface->get_fsm_execution_state();
+        const char* state_name =
+          (current_state >= 0 && current_state < NUM_STATES)
+            ? states[current_state].name
+            : "UNKNOWN";
+        LOG_INFO(node, "Current FSM state: %s (%d)", state_name, current_state);
+
+      cycles_since_stats_log = 0;
+      max_abs_jitter_us = 0.0;
+      last_stats_log_time = now;
     }
-    while (deadline < now) {
-      deadline += desired_loop_rate;
+
+    last_cycle_time = now;
+    next_cycle_time += desired_loop_period;
+
+    if (next_cycle_time <= now) {
+      const auto behind = now - next_cycle_time;
+      const auto missed_cycles = static_cast<std::int64_t>(
+          std::chrono::duration_cast<std::chrono::microseconds>(behind).count() /
+          desired_loop_period.count()) + 1;
+      next_cycle_time += desired_loop_period * missed_cycles;
+      RCLCPP_WARN_THROTTLE(node->get_logger(),
+                           *node->get_clock(),
+                           2000,
+                           "Control loop overrun: missed %ld cycles",
+                           missed_cycles);
     }
   }
 
