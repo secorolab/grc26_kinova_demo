@@ -11,7 +11,9 @@ enable_extension("isaacsim.ros2.sim_control")
 simulation_app.update()
 
 # Get the USD path
-usd_path = "../assets/grc26_demo.usd"
+from pathlib import Path
+package_dir = Path(__file__).parents[1]
+usd_path = Path.joinpath(package_dir, "assets", "grc26_demo.usd").as_posix()
 print(f"Loading USD from: {usd_path}")
 
 # Open the stage directly — preserves OmniGraphs, physics, TF publishers
