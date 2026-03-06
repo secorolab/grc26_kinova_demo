@@ -224,6 +224,7 @@ class DualArmPickPlace(Node):
         self.bhv_ctx_id    = None
         self.bhv_goal_in   = False
         self.bhv_goal_done = False
+        self.bhv_wait_for_goal = True
 
         self.get_logger().info('DualArmPickPlace node configured.')
 
@@ -311,6 +312,7 @@ class DualArmPickPlace(Node):
         feedback.scenario_context_id = self.bhv_ctx_id
 
         self.bhv_goal_in = True
+        self.bhv_wait_for_goal = False
 
         rate = self.create_rate(100)
         while rclpy.ok() and not self.bhv_goal_done:
@@ -406,7 +408,7 @@ class DualArmPickPlace(Node):
         return True
 
     def gripper_control(self, ac, af, open: bool, joint_name: str):
-        val = 0.0 if open else 0.8
+        val = 0.0 if open else 0.6
         gripper_msg = self.get_gripper_cmd_msg(val, joint_name)
         # send goal to gripper
         if not self.execute_action(ac, af, gripper_msg):
@@ -423,18 +425,26 @@ def idle_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
         ud.m1 = True
         produce_event(fsm.event_data, EventID.E_M_HOME_CONFIG)
     else:
-        reset_future = node.reset_simulation_service.call_async(node.reset_simulation_request)
-        while not reset_future.done():
-            rclpy.spin_once(node)
-        if reset_future.result().result.result != SimResult.RESULT_OK:
-            node.logger.error('Failed to reset simulation')
-        node.bhv_goal_done = True
+        if not node.bhv_wait_for_goal:
+            if not hasattr(node, '_reset_future') or node._reset_future is None:
+                node._reset_future = node.reset_simulation_service.call_async(node.reset_simulation_request)
+
+            if node._reset_future.done():
+                service_result = node._reset_future.result().result.result
+                node._reset_future = None
+                if service_result == SimResult.RESULT_OK:
+                    node.bhv_goal_done = True
+                    node.bhv_wait_for_goal = True
+            node.get_logger().info('Waiting for simulation reset...')
 
     return True
 
 def m_home_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     ud.arm_action_type = ArmActionClientType.NAMED
     
+    ud.max_vel_sf = 0.8
+    ud.max_acc_sf = 0.8
+
     ud.move_arm1 = True
     ud.move_arm2 = True
 
@@ -580,8 +590,8 @@ def m_collaborate_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     ud.arm1_target_pose = k1_target_pose
     ud.arm2_target_pose = k2_target_pose
 
-    ud.max_vel_sf = 0.1
-    ud.max_acc_sf = 0.1
+    ud.max_vel_sf = 1.0
+    ud.max_acc_sf = 1.0
 
     ud.move_arm1 = True
     ud.move_arm2 = True
