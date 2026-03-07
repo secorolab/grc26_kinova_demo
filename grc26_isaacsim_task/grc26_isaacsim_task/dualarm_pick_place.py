@@ -2,6 +2,7 @@
 
 import signal
 import sys
+import copy
 
 import rclpy
 from rclpy.node import Node
@@ -19,8 +20,8 @@ from moveit_client.action import (
 )
 
 from geometry_msgs.msg import Pose, PoseStamped
-from std_msgs.msg import String
-from tf2_ros import Buffer, TransformListener
+from tf2_ros import Buffer, TransformListener, TransformStamped
+from tf2_geometry_msgs import do_transform_pose_stamped
 
 from pydantic import BaseModel
 from typing import Optional
@@ -57,7 +58,9 @@ EXPORTED_EVENTS = {
     'PLACE_END'  : NS_M_TMPL["evt-place-end"],
 }
 
-OBJECT_LINK = 'cutting_board_A'
+HOLDER_A     = 'holderA'
+HOLDER_B     = 'holderB'
+OBJECT_LINK  = 'cutting_board_A'
 GRASP_LINK_1 = 'grasp_point_1'
 GRASP_LINK_2 = 'grasp_point_2'
 
@@ -114,8 +117,8 @@ class UserData(BaseModel):
     arm2_done: bool                       = False
     g1_done: bool                         = False
     g2_done: bool                         = False
-    arm1_target_pose: Pose                = None
-    arm2_target_pose: Pose                = None
+    arm1_target_pose: Pose | list[Pose]   = None
+    arm2_target_pose: Pose | list[Pose]   = None
     arm1_gripper_open: bool               = True
     arm2_gripper_open: bool               = True
 
@@ -330,10 +333,10 @@ class DualArmPickPlace(Node):
         goal_handle.succeed()
         return response
 
-    def _lookup_pose(self, link: str) -> PoseStamped | None:
+    def _lookup_pose(self, link: str, target: str = 'world') -> PoseStamped | None:
         try:
             tf = self.tf_buffer.lookup_transform(
-                'world', link,
+                target, link,
                 rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=1.0),
             )
@@ -342,13 +345,56 @@ class DualArmPickPlace(Node):
             return None
 
         pose = PoseStamped()
-        pose.header.frame_id  = 'world'
+        pose.header.frame_id  = target
         pose.header.stamp     = self.get_clock().now().to_msg()
         pose.pose.position.x  = tf.transform.translation.x
         pose.pose.position.y  = tf.transform.translation.y
         pose.pose.position.z  = tf.transform.translation.z
         pose.pose.orientation = tf.transform.rotation
         return pose
+
+    def _lookup_transform(self, target: str, source: str) -> Optional[TransformStamped]:
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                target, source,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=1.0),
+            )
+            return tf
+        except Exception as exc:
+            self.get_logger().error(f'TF lookup failed from {source} to {target}: {exc}')
+            return None
+
+    def _get_pose_from_transform(self, tf: TransformStamped) -> PoseStamped:
+        pose = PoseStamped()
+        pose.header.frame_id  = tf.header.frame_id
+        pose.header.stamp     = self.get_clock().now().to_msg()
+        pose.pose.position.x  = tf.transform.translation.x
+        pose.pose.position.y  = tf.transform.translation.y
+        pose.pose.position.z  = tf.transform.translation.z
+        pose.pose.orientation = tf.transform.rotation
+        return pose
+
+    def _transform_pose_with_tf(self, pose: PoseStamped, tf: TransformStamped) -> Optional[PoseStamped]:
+        try:
+            transformed_pose = do_transform_pose_stamped(pose, tf)
+            return transformed_pose
+        except Exception as exc:
+            self.get_logger().error(f'Pose transformation failed with given TF: {exc}')
+            return None
+
+    def transform_pose(self, pose: PoseStamped, target_frame: str) -> Optional[PoseStamped]:
+        # use lookup_transform to get transform from pose's frame to target_frame
+        tf = self._lookup_transform(target_frame, pose.header.frame_id)
+        if tf is None:
+            return None
+        
+        try:
+            transformed_pose = do_transform_pose_stamped(pose, tf)
+            return transformed_pose
+        except Exception as exc:
+            self.get_logger().error(f'Pose transformation failed to {target_frame}: {exc}')
+            return None
 
     def get_move_arm_msg(self, target_pose:Pose) -> MoveToPose.Goal:
         msg = MoveToPose.Goal()
@@ -361,16 +407,22 @@ class DualArmPickPlace(Node):
 
         return msg
 
-    def get_move_cartesian_msg(self, target_pose:Pose,
+    def get_move_cartesian_msg(self, target_pose: Pose | list[Pose],
                                max_vel_sf: float, max_acc_sf: float) -> MoveToCartesianPose.Goal:
         msg = MoveToCartesianPose.Goal()
 
-        pose = PoseStamped()
-        pose.header.frame_id = 'world'
-        pose.header.stamp = self.get_clock().now().to_msg()
-        pose.pose = target_pose
-        
-        msg.waypoints.append(pose)
+        poses = []
+        if isinstance(target_pose, Pose):
+            poses.append(target_pose)
+        else:
+            poses.extend(target_pose)
+
+        for tp in poses:
+            pose = PoseStamped()
+            pose.header.frame_id = 'world'
+            pose.header.stamp = self.get_clock().now().to_msg()
+            pose.pose = tp
+            msg.waypoints.append(pose)
 
         msg.max_velocity_scaling_factor = max_vel_sf
         msg.max_acceleration_scaling_factor = max_acc_sf
@@ -389,7 +441,8 @@ class DualArmPickPlace(Node):
         return msg
 
     def move_arm(self, ac: ActionClient, af: ActionFuture, 
-                 target_pose: Pose, action_type: ArmActionClientType,
+                 target_pose: Pose | list[Pose],
+                 action_type: ArmActionClientType,
                  max_vel_sf: float, max_acc_sf: float) -> bool:
         if action_type == ArmActionClientType.POSE:
             move_arm_msg = self.get_move_arm_msg(target_pose)
@@ -424,18 +477,18 @@ def idle_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     if node.bhv_goal_in:
         ud.m1 = True
         produce_event(fsm.event_data, EventID.E_M_HOME_CONFIG)
-    else:
-        if not node.bhv_wait_for_goal:
-            if not hasattr(node, '_reset_future') or node._reset_future is None:
-                node._reset_future = node.reset_simulation_service.call_async(node.reset_simulation_request)
-
-            if node._reset_future.done():
-                service_result = node._reset_future.result().result.result
-                node._reset_future = None
-                if service_result == SimResult.RESULT_OK:
-                    node.bhv_goal_done = True
-                    node.bhv_wait_for_goal = True
-            node.get_logger().info('Waiting for simulation reset...')
+    # else:
+    #     if not node.bhv_wait_for_goal:
+    #         if not hasattr(node, '_reset_future') or node._reset_future is None:
+    #             node._reset_future = node.reset_simulation_service.call_async(node.reset_simulation_request)
+    #
+    #         if node._reset_future.done():
+    #             service_result = node._reset_future.result().result.result
+    #             node._reset_future = None
+    #             if service_result == SimResult.RESULT_OK:
+    #                 node.bhv_goal_done = True
+    #                 node.bhv_wait_for_goal = True
+    #         node.get_logger().info('Waiting for simulation reset...', throttle_duration_sec=5.0)
 
     return True
 
@@ -463,18 +516,49 @@ def m_open_gripper_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     return True
 
 def m_touch_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
-    # obj_pose = node._lookup_pose(OBJECT_LINK)
-    k1_target_pose = node._lookup_pose(GRASP_LINK_1)
-    k2_target_pose = node._lookup_pose(GRASP_LINK_2)
+
+    g11_world_pose = node._lookup_pose(GRASP_LINK_1)
+    g12_world_pose = node._lookup_pose(GRASP_LINK_2)
+
+    # lookup grasp poses in holder A frame (object is in holder A at this point)
+    gl1_a_transform = node._lookup_transform(HOLDER_A, GRASP_LINK_1)
+    gl2_a_transform = node._lookup_transform(HOLDER_A, GRASP_LINK_2)
+
+    # need to place obj in holder B for next steps, so also lookup transform from holder A to holder B
+    h_a_to_b_transform = node._lookup_transform(HOLDER_A, HOLDER_B)
+
+    # convert grasp transforms to poses in holder A frame
+    gl1_a_pose = node._get_pose_from_transform(gl1_a_transform)
+    gl2_a_pose = node._get_pose_from_transform(gl2_a_transform)
+
+    # transform grasp poses from holder A frame to holder B frame
+    gl1_b_pose = node._transform_pose_with_tf(gl1_a_pose, h_a_to_b_transform)
+    gl2_b_pose = node._transform_pose_with_tf(gl2_a_pose, h_a_to_b_transform)
+
+    if None in [gl1_a_pose, gl2_a_pose, gl1_b_pose, gl2_b_pose]:
+        node.get_logger().error('Failed to lookup/transform grasp poses')
+        return False
+
+    # now transform grasp poses to world frame
+    k1_target_pose = node.transform_pose(gl1_a_pose, 'world')
+    k2_target_pose = node.transform_pose(gl2_a_pose, 'world')
+
+    k1_b_target_pose = node.transform_pose(gl1_b_pose, 'world')
+    k2_b_target_pose = node.transform_pose(gl2_b_pose, 'world')
+
+    k1_target_pose.pose.orientation = g11_world_pose.pose.orientation
+    k2_target_pose.pose.orientation = g12_world_pose.pose.orientation
+
+    k1_b_target_pose.pose.orientation = g11_world_pose.pose.orientation
+    k2_b_target_pose.pose.orientation = g12_world_pose.pose.orientation
     
     if k1_target_pose is None or k2_target_pose is None:
         node.get_logger().error('Failed to lookup target poses')
         return False
 
-    ud.arm1_end_pose = k1_target_pose.pose
-    ud.arm2_end_pose = k2_target_pose.pose
+    ud.arm1_end_pose = k1_b_target_pose.pose
+    ud.arm2_end_pose = k2_b_target_pose.pose
 
-    # adjust to be behind the object for grasping
     approach_offset = 0.1  # 10 cm
     k1_target_pose.pose.position.x -= approach_offset
     k2_target_pose.pose.position.x += approach_offset
@@ -484,7 +568,7 @@ def m_touch_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     
     ud.arm1_target_pose = k1_target_pose.pose
     ud.arm2_target_pose = k2_target_pose.pose
-
+    
     # publish target poses for visualization/debugging
     node.arm1_target_pub.publish(k1_target_pose)
     node.arm2_target_pub.publish(k2_target_pose)
@@ -526,8 +610,8 @@ def m_slide_along_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace)
     k1_target_pose.pose.position.x += 0.02
     k2_target_pose.pose.position.x -= 0.02
 
-    ud.arm1_end_pose.position.x = k1_target_pose.pose.position.x
-    ud.arm2_end_pose.position.x = k2_target_pose.pose.position.x
+    # ud.arm1_end_pose.position.x = k1_target_pose.pose.position.x
+    # ud.arm2_end_pose.position.x = k2_target_pose.pose.position.x
 
     k1_target_pose.pose.position.z += 0.01
     k2_target_pose.pose.position.z += 0.01
@@ -537,10 +621,6 @@ def m_slide_along_table_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace)
 
     node.arm1_target_pub.publish(k1_target_pose)
     node.arm2_target_pub.publish(k2_target_pose)
-
-    
-
-    
 
     ud.move_arm1 = True
     ud.move_arm2 = True
@@ -569,26 +649,23 @@ def m_grasp_object_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
 
 def m_collaborate_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
     
-    # k1_target_pose = node._lookup_pose(GRASP_LINK_1)
-    # k2_target_pose = node._lookup_pose(GRASP_LINK_2)
-    #
-    # if k1_target_pose is None or k2_target_pose is None:
-    #     node.get_logger().error('Failed to lookup target poses')
-    #     return False
-
-    # k1_target_pose.pose.position.z += 0.4
-    # k2_target_pose.pose.position.z += 0.4
-
     k1_target_pose = ud.arm1_end_pose
     k2_target_pose = ud.arm2_end_pose
 
-    k1_target_pose.position.x 
+    arm1_wp1 = copy.deepcopy(k1_target_pose)
+    arm2_wp1 = copy.deepcopy(k2_target_pose)
 
-    k1_target_pose.position.z += 0.4
-    k2_target_pose.position.z += 0.4
+    arm1_wp1.position.z += 0.3
+    arm2_wp1.position.z += 0.3
 
-    ud.arm1_target_pose = k1_target_pose
-    ud.arm2_target_pose = k2_target_pose
+    arm1_waypoints = [arm1_wp1, k1_target_pose]
+    arm2_waypoints = [arm2_wp1, k2_target_pose]
+
+    for wp in arm1_waypoints:
+        print(f"a1 wp: {wp.position.x:.3f}, {wp.position.y:.3f}, {wp.position.z:.3f}")
+
+    ud.arm1_target_pose = arm1_waypoints
+    ud.arm2_target_pose = arm2_waypoints
 
     ud.max_vel_sf = 1.0
     ud.max_acc_sf = 1.0
