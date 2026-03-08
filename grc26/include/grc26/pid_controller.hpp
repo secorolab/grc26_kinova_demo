@@ -46,6 +46,12 @@ class PID {
     bool first_update = true;
     bool stiffness_control_mode = false;
     LowPassFilter d_signal_filter;
+
+    double last_error = 0.0;
+    double last_p_term = 0.0;
+    double last_i_term = 0.0;
+    double last_d_term = 0.0;
+    double last_output = 0.0;
 };
 
 #endif // PID_CONTROLLER_HPP

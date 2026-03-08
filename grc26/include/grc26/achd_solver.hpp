@@ -4,6 +4,10 @@
 #include <memory>
 #include "kdl/chainhdsolver_vereshchagin_fixed_joint.hpp"
 #include "kdl/chainhdsolver_vereshchagin_fext_fixed_joint.hpp"
+#include "kdl/chainidsolver_recursive_newton_euler.hpp"
+#include <kdl/chainiksolvervel_pinv.hpp>
+#include <kdl/chainjnttojacdotsolver.hpp>
+#include <kdl/chainjnttojacsolver.hpp>
 #include <kdl/jntarray.hpp>
 #include <kdl/jacobian.hpp>
 #include <kdl/frames.hpp>
@@ -25,6 +29,8 @@ public:
 
   void updateTorqueCmdInState(SystemState& state) const;
 
+  void updateTorqueCmdFromRNEAInState(SystemState& state) const;
+
   KDL::Wrenches& externalWrenches() noexcept { return f_ext_; }
   const KDL::Wrenches& externalWrenches() const noexcept { return f_ext_; }
 
@@ -44,9 +50,16 @@ public:
   int computeTorques();
   int computeTorquesFext();
 
+  void computeTorquesRNEA(
+    KDL::JntArrayVel &jnt_velocities,
+    KDL::JntArray &jnt_positions,
+    KDL::JntArray &jnt_velocity,
+    KDL::Wrenches &linkWrenches);
+
   const KDL::JntArray& qdd() const { return qdd_; }
   const KDL::JntArray& tauCmd() const { return tau_cmd_; }
   const KDL::JntArray& tauCmdFext() const { return tau_cmd_fext_; }
+  const KDL::JntArray& tauCmdRNEA() const { return tau_cmd_rnea; }
   void resetTorqueOutputs();
 
 
@@ -55,6 +68,10 @@ private:
 
   std::unique_ptr<KDL::ChainHdSolver_Vereshchagin_Fixed_Joint> solver_fixed_jnt_;
   std::unique_ptr<KDL::ChainHdSolver_Vereshchagin_Fext_FixedJoint> solver_fext_;
+  std::unique_ptr<KDL::ChainJntToJacDotSolver> jacobDotSolver;
+  std::unique_ptr<KDL::ChainIkSolverVel_pinv> ikSolverAcc;
+  std::unique_ptr<KDL::ChainIdSolver_RNE> idSolver;
+
 
   unsigned int dof_{0};
   unsigned int num_segments_{0};
@@ -77,6 +94,13 @@ private:
   KDL::Jacobian alpha_fext_;
   KDL::Wrenches f_ext_;
   KDL::Wrenches f_ext_fext_;
+
+  // RNEA solver variables
+  KDL::Twist xdd;
+  KDL::Twist xdd_minus_jd_qd;
+  KDL::Twist jd_qd;
+  KDL::JntArray jnt_accelerations;
+  KDL::JntArray tau_cmd_rnea;
 
   bool initialized_{false};
 };

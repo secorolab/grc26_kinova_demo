@@ -44,6 +44,7 @@
 #include "grc26/compute_controller_command.hpp"
 #include "grc26/arm_kinematics.hpp"
 #include "grc26/controller_config.hpp"
+#include "grc26/debug_signals.hpp"
 
 #define NUM_JOINTS 7
 
@@ -92,6 +93,7 @@ public:
   bool update_ft_force_estimate(const SystemState& system_state,
                                 std::array<double, 6>& corrected_force_mean);
   void run_fsm();
+  bool getLatestDebugSample(DebugSample& out) const;
 
 public:
   bool enable_arm_ctrl = true;
@@ -129,6 +131,10 @@ private:
   std::array<double, 6> ft_window_sum_{};
   std::size_t ft_window_count_ = 0;
   std::size_t ft_window_index_ = 0;
+
+  DebugSample latest_debug_sample_{};
+  bool debug_sample_valid_ = false;
+  std::uint64_t debug_sequence_counter_ = 0;
 
 };
 

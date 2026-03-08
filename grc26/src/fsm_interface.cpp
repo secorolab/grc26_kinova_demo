@@ -244,9 +244,10 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
         printf("[Warning] Collaboration enabled but FT sensor not present\n");
       }
     }
+
     if (task_spec.collaborate_spec.enabled && has_corrected_wrench) 
     {
-      auto& fext_wrenches =  solver_->externalWrenches_fext_solver(); // f_ext_fext_;
+      auto& fext_wrenches = solver_->externalWrenches_fext_solver(); // f_ext_fext_;
       if (!fext_wrenches.empty()) 
       {
         auto& ee_external_wrench = fext_wrenches.back();
@@ -287,13 +288,27 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
         }
       }
     }
+
     // get beta and f_ext based on task_spec and current state using controllers
+    DebugSample debug_sample;
     compute_ctr_cmd_obj.compute(
         system_state,
         *arm_kinematics_,
         task_spec,
         solver_->beta(),
-        solver_->externalWrenches());
+        solver_->externalWrenches(),
+        system_state.arm.cycle_time,
+        &debug_sample);
+
+    for (int i = 0; i < NUM_JOINTS; ++i) {
+      debug_sample.joint_position[i] = system_state.arm.q[i];
+      debug_sample.joint_velocity[i] = system_state.arm.qd[i];
+    }
+    debug_sample.sample_time = std::chrono::steady_clock::now();
+    debug_sample.sequence = ++debug_sequence_counter_;
+    debug_sample.fsm_state = static_cast<int>(fsm_execution_state);
+    latest_debug_sample_ = debug_sample;
+    debug_sample_valid_ = true;
 
     printf("[EE Velocity] : [%f, %f, %f]\n", arm_kinematics_->twist().vel.x(), arm_kinematics_->twist().vel.y(), arm_kinematics_->twist().vel.z());
     printf("[Beta command] : [%f, %f, %f, %f, %f, %f]\n", solver_->beta()(0), solver_->beta()(1), solver_->beta()(2), solver_->beta()(3), solver_->beta()(4), solver_->beta()(5));
@@ -306,8 +321,20 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
             solver_->externalWrenches().back()(5));
 
     // computeTorques adds torques from vn_fixed_joint and vn_fext solvers
+
+    // Using V'n solver
     solver_->computeTorques();
     solver_->updateTorqueCmdInState(system_state);
+
+    // Using RNEA solver
+    // solver_->computeTorquesRNEA(arm_kinematics_->jointVelocities(),
+    //                             arm_kinematics_->jointPositions(),
+    //                             arm_kinematics_->jointVelocity(),
+    //                             solver_->externalWrenches());
+    
+    // solver_->updateTorqueCmdFromRNEAInState(system_state);
+
+    // reset torque commands to zero from all solvers
     solver_->resetTorqueOutputs();
   }
   else if (task_spec.joint_position.enabled) {
@@ -499,14 +526,14 @@ void FSMInterface::collaborate_behavior_config(events *eventData, SystemState& s
 
   // TODO: define collaborate behavior spec
   task_spec.forearm_yaw_control_enabled = true;
-  task_spec.ee_linear.enabled = true;
+  task_spec.ee_linear.enabled = false;
   task_spec.ee_linear.mode[0] = LinearMode::Velocity;
   task_spec.ee_linear.mode[1] = LinearMode::Velocity;
   task_spec.ee_linear.mode[2] = LinearMode::Velocity;
 
-  task_spec.ee_linear.velocity[0] = 0.0; // m/s
+  task_spec.ee_linear.velocity[0] = -0.0; // m/s
   task_spec.ee_linear.velocity[1] = 0.0; // m/s
-  task_spec.ee_linear.velocity[2] = -0.02; // m/s
+  task_spec.ee_linear.velocity[2] = 0.0; // m/s
 
   task_spec.orientation.enabled = true;
   task_spec.orientation.mode = OrientationMode::Position;
@@ -631,3 +658,12 @@ void FSMInterface::run_fsm(){
   fsm_step_nbx(&fsm);
   reconfig_event_buffers(&eventData);
 };
+
+bool FSMInterface::getLatestDebugSample(DebugSample& out) const
+{
+  if (!debug_sample_valid_) {
+    return false;
+  }
+  out = latest_debug_sample_;
+  return true;
+}

@@ -19,6 +19,12 @@ public:
 
   void update(const SystemState& state) noexcept;
 
+  KDL::JntArray& jointPositions() noexcept { return q_kdl_; }
+  const KDL::JntArray& jointPositions() const noexcept { return q_kdl_; }
+  KDL::JntArray& jointVelocity() noexcept { return qd_kdl_; }
+  const KDL::JntArray& jointVelocity() const noexcept { return qd_kdl_; }
+  KDL::JntArrayVel& jointVelocities() noexcept { return q_vel_; }
+  const KDL::JntArrayVel& jointVelocities() const noexcept { return q_vel_; }
   const KDL::Frame& pose() const noexcept { return pose_; }
   const KDL::Frame& forearmPoseBL() const noexcept { return forearm_pose_BL_; }
   const KDL::Twist& twist() const noexcept { return twist_; }

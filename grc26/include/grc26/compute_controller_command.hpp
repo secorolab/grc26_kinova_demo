@@ -8,6 +8,7 @@
 #include "grc26/task_spec.hpp"
 #include "grc26/achd_solver.hpp"
 #include "grc26/controller_config.hpp"
+#include "grc26/debug_signals.hpp"
 
 class ComputeControllerCommand
 {
@@ -20,7 +21,8 @@ public:
         const TaskSpec& task,
         KDL::JntArray& beta,
         KDL::Wrenches& f_ext,
-        double dt = 0.001);
+        double dt = 0.001,
+        DebugSample* debug_sample = nullptr);
 
     // setGains refreshes the local copy of controllers and its internal states
     void setGains(const Controllers& controllers) { controllers_ = controllers; };

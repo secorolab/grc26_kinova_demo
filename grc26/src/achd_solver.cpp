@@ -38,11 +38,27 @@ void VereshchaginSolver::updateTorqueCmdInState(SystemState& state) const
   }
 }
 
+void VereshchaginSolver::updateTorqueCmdFromRNEAInState(SystemState& state) const
+{
+  for (unsigned int i = 0; i < tau_cmd_rnea.rows(); ++i)
+  {
+    const double rnea_tau = std::isfinite(tau_cmd_rnea(i)) ? tau_cmd_rnea(i) : 0.0;
+    state.arm.tau_cmd[i] = static_cast<float>(rnea_tau);
+  }
+}
+
 void VereshchaginSolver::resetTorqueOutputs() { 
     for (unsigned int i = 0; i < tau_cmd_.rows(); ++i)
     {
       tau_cmd_(i) = 0.0;
+    }
+    for (unsigned int i = 0; i < tau_cmd_fext_.rows(); ++i)
+    {
       tau_cmd_fext_(i) = 0.0;
+    }
+    for (unsigned int i = 0; i < tau_cmd_rnea.rows(); ++i)
+    {
+      tau_cmd_rnea(i) = 0.0;
     }
   }
 
@@ -69,8 +85,10 @@ bool VereshchaginSolver::initialize(unsigned int num_constraints)
   qd_           = KDL::JntArray(dof_);
   qdd_          = KDL::JntArray(dof_);
   qdd_fext_     = KDL::JntArray(dof_);
+  jnt_accelerations = KDL::JntArray(dof_);
   tau_cmd_      = KDL::JntArray(dof_);
   tau_cmd_fext_ = KDL::JntArray(dof_);
+  tau_cmd_rnea  = KDL::JntArray(dof_);
   ff_taus_      = KDL::JntArray(dof_);
   ff_taus_fext_ = KDL::JntArray(dof_);
   beta_         = KDL::JntArray(num_constraints_);
@@ -93,6 +111,20 @@ bool VereshchaginSolver::initialize(unsigned int num_constraints)
   // Initialize a zero gravity vector for fext solver
   KDL::Twist g_twist_zero(KDL::Vector::Zero(), KDL::Vector::Zero());
 
+  // Initialise RNEA solver
+  jacobDotSolver = std::make_unique<KDL::ChainJntToJacDotSolver>(model_.chain());
+  ikSolverAcc = std::make_unique<KDL::ChainIkSolverVel_pinv>(model_.chain());
+
+  KDL::Vector gravity(gravity_vec.x(),
+                      gravity_vec.y(),
+                      gravity_vec.z());
+
+  idSolver = std::make_unique<KDL::ChainIdSolver_RNE>(model_.chain(), gravity);
+
+
+  // End of RNEA solver initialization
+
+  // Initialize Vereshchagin solvers
   solver_fixed_jnt_ = std::make_unique<KDL::ChainHdSolver_Vereshchagin_Fixed_Joint>(
           model_.chain(), g_twist, num_constraints_);
 
@@ -150,4 +182,16 @@ int VereshchaginSolver::computeTorquesFext()
                                  f_ext_fext_,
                                  ff_taus_fext_,
                                  tau_cmd_fext_);
+}
+
+void VereshchaginSolver::computeTorquesRNEA(
+    KDL::JntArrayVel &jnt_velocities,
+    KDL::JntArray &jnt_positions,
+    KDL::JntArray &jnt_velocity,
+    KDL::Wrenches &linkWrenches)
+{
+  jacobDotSolver->JntToJacDot(jnt_velocities, jd_qd);
+  xdd_minus_jd_qd = xdd - jd_qd;
+  ikSolverAcc->CartToJnt(jnt_positions, xdd_minus_jd_qd, jnt_accelerations);
+  idSolver->CartToJnt(jnt_positions, jnt_velocity, jnt_accelerations, linkWrenches, tau_cmd_rnea);
 }

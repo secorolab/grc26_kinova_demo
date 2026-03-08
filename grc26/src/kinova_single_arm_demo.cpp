@@ -12,6 +12,8 @@
 
 #include "grc26/task_status.hpp"
 #include "grc26/task_status_node.hpp"
+#include "grc26/debug_state_node.hpp"
+#include "grc26/debug_signals.hpp"
 #include "grc26/msg/task_status.hpp"
 #include "grc26/fsm_interface.hpp"
 #include "grc26/system_state.hpp"
@@ -45,7 +47,7 @@ int main(int argc, char ** argv)
   SystemState system_state;
   system_state.gripper.present = false;
   system_state.arm.present = true;
-  system_state.ft_sensor.present = true;
+  system_state.ft_sensor.present = false;
 
   TaskStatusData status;
 
@@ -127,14 +129,17 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv, init_options);
 
   auto task_status = std::make_shared<TaskStatus>();
+  auto debug_buffer = std::make_shared<DebugSignalBuffer>(4000);
   auto fsm_interface = std::make_shared<FSMInterface>(system_state, arm, gripper, ft_sensor, status);
 
   auto node = std::make_shared<TaskStatusROSNode>(task_status);
+  auto debug_node = std::make_shared<DebugStateROSNode>(debug_buffer);
   // TODO: initialise action server node here
 
   rclcpp::executors::MultiThreadedExecutor executor(
       rclcpp::ExecutorOptions(), 2);
   executor.add_node(node);
+  executor.add_node(debug_node);
   // TODO: add action server node here
 
   std::thread ros_thread([&executor]() {
@@ -152,6 +157,7 @@ int main(int argc, char ** argv)
   std::uint64_t cycles_since_stats_log = 0;
   double max_abs_jitter_us = 0.0;
   std::uint64_t last_ft_sequence = 0;
+  std::uint64_t last_debug_sequence = 0;
   auto latest_ft_sample_time = std::chrono::steady_clock::time_point{};
 
   while (!shutting_down.load()){
@@ -190,6 +196,14 @@ int main(int argc, char ** argv)
     }
 
     fsm_interface->run_fsm();
+
+    DebugSample debug_sample;
+    if (fsm_interface->getLatestDebugSample(debug_sample) &&
+        debug_sample.sequence != last_debug_sequence) {
+      last_debug_sequence = debug_sample.sequence;
+      debug_buffer->push(debug_sample);
+    }
+
     task_status->update(status);
 
     if (fsm_interface->get_current_state() == S_EXIT) {

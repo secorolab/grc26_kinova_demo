@@ -47,10 +47,12 @@ void PID::set_params(double p_gain,
 
 double PID::control(double error, double dt)
 {
-    if (dt <= 0.0) {dt = 1e-6;}  // safety fallback
+    if (dt <= 0.0) {dt = 1e-3;}  // safety fallback
 
+    // Deadzone applied only to P and D
+    double effective_error = error;
     if (std::abs(error) < dead_zone_limit)
-    { error = 0.0; }
+    { effective_error = 0.0; }
     
     if (first_update)
     {
@@ -60,7 +62,12 @@ double PID::control(double error, double dt)
     
     if (stiffness_control_mode)
     {
-        return kp * error;
+        last_error = error;
+        last_p_term = kp * effective_error;
+        last_i_term = 0.0;
+        last_d_term = 0.0;
+        last_output = last_p_term;
+        return last_output;
     }
 
     // computing derivative term
@@ -69,12 +76,11 @@ double PID::control(double error, double dt)
     // filtering the derivative term
     double filtered_d = d_signal_filter.update(err_diff);
 
-    // integral term with anti-windup via integral clamping and decay
     err_integ += error * dt;
-    if ((error > 0 && err_integ < 0) || (error < 0 && err_integ > 0))
-    {
-        err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
-    }
+    // if ((error > 0 && err_integ < 0) || (error < 0 && err_integ > 0))
+    // {
+    //     err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
+    // }
     // Clamp integral to prevent windup
     if (err_integ > err_sum_tol) {
         err_integ = err_sum_tol;
@@ -82,15 +88,25 @@ double PID::control(double error, double dt)
         err_integ = -err_sum_tol;
     }
 
-    double out = kp * error + ki * err_integ + kd * filtered_d;
-    // if (kp > 0.0)
-    // {
-    //     printf("PID gains: P: %f, I: %f, D: %f\n", kp, ki, kd);
-    //     printf("PID terms: P: %f, I: %f, D: %f\n", kp * error, ki * err_integ, kd * filtered_d);
-    //     printf("Output is: %f\n", out);
-    // }
+    const double p_term = kp * effective_error;
+    const double i_term = ki * err_integ;
+    const double d_term = kd * filtered_d;
+    double out = p_term + i_term + d_term;
+
+    double unsat = out;
 
     if (out > saturation_limit) out = saturation_limit;
     if (out < -saturation_limit) out = -saturation_limit;
+
+    // anti-windup
+    if (unsat != out)
+        err_integ -= error * dt;
+
+    last_error = error;
+    last_p_term = p_term;
+    last_i_term = i_term;
+    last_d_term = d_term;
+    last_output = out;
+
     return out;
 }

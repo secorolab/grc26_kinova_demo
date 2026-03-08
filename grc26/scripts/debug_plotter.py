@@ -5,6 +5,7 @@ import os
 import sys
 import signal
 import threading
+import time
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -55,6 +56,15 @@ class DebugVisualizer(Node):
 
         self.lock = threading.Lock()
 
+        # ---------------- MESSAGE COUNTERS ----------------
+        self.msg_count_js: int = 0
+        self.msg_count_ee: int = 0
+        self.msg_count_pid: int = 0
+        self._rate_last_time: float = time.monotonic()
+        self._rate_last_js: int = 0
+        self._rate_last_ee: int = 0
+        self._rate_last_pid: int = 0
+
         # ---------------- SUBSCRIPTIONS ----------------
         self.create_subscription(
             JointState, "/debug_js", self.joint_state_callback, qos_profile_sensor_data
@@ -68,7 +78,7 @@ class DebugVisualizer(Node):
         # Cartesian PID debug (6 PIDDebug fields)
         self.create_subscription(
             CartesianPIDDebug,
-            "/cart_pid_debug",
+            "/pid_debug",
             self.pid_callback,
             qos_profile_sensor_data,
         )
@@ -116,6 +126,7 @@ class DebugVisualizer(Node):
 
     def joint_state_callback(self, msg: JointState) -> None:
         with self.lock:
+            self.msg_count_js += 1
             t, self.start_time_js = self._elapsed(self.start_time_js)
             self.time_js.append(t)
 
@@ -133,6 +144,7 @@ class DebugVisualizer(Node):
 
     def ee_vel_callback(self, msg: Twist) -> None:
         with self.lock:
+            self.msg_count_ee += 1
             t, self.start_time_ee = self._elapsed(self.start_time_ee)
             self.time_ee.append(t)
 
@@ -166,6 +178,7 @@ class DebugVisualizer(Node):
 
     def pid_callback(self, msg: CartesianPIDDebug) -> None:
         with self.lock:
+            self.msg_count_pid += 1
             t, self.start_time_pid = self._elapsed(self.start_time_pid)
             self.time_pid.append(t)
 
@@ -328,6 +341,21 @@ class DebugVisualizer(Node):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
+        # ---------------- LIVE STREAM STATUS ----------------
+        status_box = QtWidgets.QGroupBox("ROS Stream Status")
+        status_layout = QtWidgets.QHBoxLayout(status_box)
+
+        self.status_js_label = QtWidgets.QLabel("/debug_js: 0 msgs, 0.0 Hz")
+        self.status_ee_label = QtWidgets.QLabel("/debug_ee_vel: 0 msgs, 0.0 Hz")
+        self.status_pid_label = QtWidgets.QLabel("/pid_debug: 0 msgs, 0.0 Hz")
+
+        status_layout.addWidget(self.status_js_label)
+        status_layout.addWidget(self.status_ee_label)
+        status_layout.addWidget(self.status_pid_label)
+        status_layout.addStretch()
+
+        layout.addWidget(status_box)
+
         # Theme state
         self.is_dark_theme = False
         self.apply_theme()
@@ -389,6 +417,32 @@ class DebugVisualizer(Node):
                     if n > 0:
                         self.curves[self.plot_idx_joint_eff][i].setData(t[:n], y[:n])
 
+            now = time.monotonic()
+            dt = now - self._rate_last_time
+            if dt >= 0.5:
+                js_delta = self.msg_count_js - self._rate_last_js
+                ee_delta = self.msg_count_ee - self._rate_last_ee
+                pid_delta = self.msg_count_pid - self._rate_last_pid
+
+                js_hz = js_delta / dt
+                ee_hz = ee_delta / dt
+                pid_hz = pid_delta / dt
+
+                self.status_js_label.setText(
+                    f"/debug_js: {self.msg_count_js} msgs, {js_hz:.1f} Hz"
+                )
+                self.status_ee_label.setText(
+                    f"/debug_ee_vel: {self.msg_count_ee} msgs, {ee_hz:.1f} Hz"
+                )
+                self.status_pid_label.setText(
+                    f"/pid_debug: {self.msg_count_pid} msgs, {pid_hz:.1f} Hz"
+                )
+
+                self._rate_last_js = self.msg_count_js
+                self._rate_last_ee = self.msg_count_ee
+                self._rate_last_pid = self.msg_count_pid
+                self._rate_last_time = now
+
     # ---------------- UTILITIES ----------------
 
     def reset_plots(self) -> None:
@@ -411,6 +465,18 @@ class DebugVisualizer(Node):
             for ax in self.pid_axes:
                 for comp in self.pid_components:
                     self.pid_data[ax][comp].clear()
+
+            self.msg_count_js = 0
+            self.msg_count_ee = 0
+            self.msg_count_pid = 0
+            self._rate_last_js = 0
+            self._rate_last_ee = 0
+            self._rate_last_pid = 0
+            self._rate_last_time = time.monotonic()
+
+            self.status_js_label.setText("/debug_js: 0 msgs, 0.0 Hz")
+            self.status_ee_label.setText("/debug_ee_vel: 0 msgs, 0.0 Hz")
+            self.status_pid_label.setText("/pid_debug: 0 msgs, 0.0 Hz")
 
         for curves in self.curves:
             for curve in curves:

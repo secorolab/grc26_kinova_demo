@@ -11,7 +11,8 @@ void ComputeControllerCommand::compute(
     const TaskSpec& task,
     KDL::JntArray& beta,
     KDL::Wrenches& f_ext,
-    double dt)
+    double dt,
+    DebugSample* debug_sample)
 {
     if (dt <= 0.0)
         dt = (state.arm.cycle_time > 0.0) ? state.arm.cycle_time : 1e-3;
@@ -26,6 +27,32 @@ void ComputeControllerCommand::compute(
     const KDL::Vector& ee_pos   = kin.pose().p;
     const KDL::Twist&  ee_twist = kin.twist();
 
+    if (debug_sample) {
+        for (int axis = 0; axis < 3; ++axis) {
+            debug_sample->ee_vel[axis] = ee_twist.vel[axis];
+            debug_sample->ee_vel[3 + axis] = ee_twist.rot[axis];
+            debug_sample->ee_vel_error[axis] = 0.0;
+            debug_sample->ee_vel_error[3 + axis] = 0.0;
+            debug_sample->control_signal[axis] = 0.0;
+            debug_sample->control_signal[3 + axis] = 0.0;
+            debug_sample->pid_axes[axis] = PIDAxisDebug{};
+            debug_sample->pid_axes[3 + axis] = PIDAxisDebug{};
+        }
+    }
+
+    const auto capture_pid_axis = [&](int axis, const PID& pid, double error, double control_sig) {
+        if (!debug_sample || axis < 0 || axis >= 6) {
+            return;
+        }
+        debug_sample->ee_vel_error[axis] = error;
+        debug_sample->control_signal[axis] = control_sig;
+        debug_sample->pid_axes[axis].p = pid.last_p_term;
+        debug_sample->pid_axes[axis].i = pid.last_i_term;
+        debug_sample->pid_axes[axis].d = pid.last_d_term;
+        debug_sample->pid_axes[axis].error = pid.last_error;
+        debug_sample->pid_axes[axis].control_sig = pid.last_output;
+    };
+
     // ---- Linear Control ----
     if (task.ee_linear.enabled)
     {
@@ -37,6 +64,7 @@ void ComputeControllerCommand::compute(
             {
                 double err = task.ee_linear.velocity[i] - ee_twist.vel[i];
                 beta(i) = controllers_.cart_ctrl[i].control(err, dt);
+                capture_pid_axis(i, controllers_.cart_ctrl[i], err, beta(i));
                 break;
             }
 
@@ -47,6 +75,7 @@ void ComputeControllerCommand::compute(
                 pos_error = std::max(std::min(pos_error, task.ee_linear.vel_threshold), -task.ee_linear.vel_threshold);
 
                 beta(i) = controllers_.cart_ctrl[i].control(pos_error, dt);
+                capture_pid_axis(i, controllers_.cart_ctrl[i], pos_error, beta(i));
                 if (i == 2)
                 {
                     printf("Position error in z: %f, velocity: %f, beta: %f\n", pos_error, ee_twist.vel[i], beta(i));
@@ -102,16 +131,21 @@ void ComputeControllerCommand::compute(
             printf("[Orientation control]: RPY error [%f, %f, %f]\n", diff(0), diff(1), diff(2));
 
             for (int i = 0; i < 3; ++i){
+                const double rot_err = diff(i);
                 if (seg == 8) // if controlling at the end-effector, using beta
                 {
-                    f_ext[seg](3 + i) = - controllers_.cart_ctrl[i+3].control(diff(i));
+                    const double pid_output = controllers_.cart_ctrl[i+3].control(rot_err, dt);
+                    f_ext[seg](3 + i) = -pid_output;
+                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], rot_err, f_ext[seg](3 + i));
                     printf("[Orientation control]: external torque for axis %d: %f\n", i, f_ext[seg](3 + i));
                     // beta(3 + i) = controllers_.cart_ctrl[i+3].control(diff(i));
                     // printf("[Orientation control]: beta for axis %d: %f\n", i, beta(3 + i));
                 }
                 else // if controlling at a different segment, using fext interface to apply torques
                 {
-                    f_ext[seg](3 + i) = - controllers_.cart_ctrl[i+3].control(diff(i));
+                    const double pid_output = controllers_.cart_ctrl[i+3].control(rot_err, dt);
+                    f_ext[seg](3 + i) = -pid_output;
+                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], rot_err, f_ext[seg](3 + i));
                 }
             }
 
@@ -145,9 +179,18 @@ Joint torque 6: 0.006506
 
             for (int i = 0; i < 3; ++i){
                 if (seg == 8) // if controlling at the end-effector, using beta
-                    beta(3 + i) = controllers_.cart_ctrl[i+3].control(task.orientation.ang_vel[i] - ee_twist.rot[i]);
+                {
+                    const double err = task.orientation.ang_vel[i] - ee_twist.rot[i];
+                    beta(3 + i) = controllers_.cart_ctrl[i+3].control(err, dt);
+                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], err, beta(3 + i));
+                }
                 else // if controlling at a different segment, we use the velocity error to compute desired angular velocity for damping control
-                    f_ext[seg](3 + i) = -controllers_.cart_ctrl[i+3].control(task.orientation.ang_vel[i] - ee_twist.rot[i]);
+                {
+                    const double err = task.orientation.ang_vel[i] - ee_twist.rot[i];
+                    const double pid_output = controllers_.cart_ctrl[i+3].control(err, dt);
+                    f_ext[seg](3 + i) = -pid_output;
+                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], err, f_ext[seg](3 + i));
+                }
             }
 
             break;
@@ -187,7 +230,7 @@ Joint torque 6: 0.006506
     if (task.forearm_yaw_control_enabled)
     {
         double forearm_link_y_axis_angle_sp = 0.0;
-        double stiffness_forearm_y_axis_angle = 50.0;
+        double stiffness_forearm_y_axis_angle = 30.0;
         double deadband_forearm_y_axis_angle = 0.0;
         double torque_limit_forearm_link = 25.0;
 

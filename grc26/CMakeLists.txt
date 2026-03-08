@@ -54,6 +54,7 @@ add_executable(kinova_single_arm_demo
                 src/arm_kinematics.cpp
                 src/compute_controller_command.cpp
                 src/controller_config.cpp
+                src/debug_state_node.cpp
                 src/filters.cpp
                 src/fsm_interface.cpp
                 src/fsm_utils.cpp
