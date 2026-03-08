@@ -1,6 +1,5 @@
 #include "grc26/compute_controller_command.hpp"
 
-
 ComputeControllerCommand::ComputeControllerCommand(const Controllers& controllers)
 : controllers_(controllers)
 {
@@ -37,7 +36,7 @@ void ComputeControllerCommand::compute(
             case LinearMode::Velocity:
             {
                 double err = task.ee_linear.velocity[i] - ee_twist.vel[i];
-                beta(i) = controllers_.pid_lin[i].control(err, dt);
+                beta(i) = controllers_.cart_ctrl[i].control(err, dt);
                 break;
             }
 
@@ -47,7 +46,7 @@ void ComputeControllerCommand::compute(
                 // clamp pos_error with vref
                 pos_error = std::max(std::min(pos_error, task.ee_linear.vel_threshold), -task.ee_linear.vel_threshold);
 
-                beta(i) = controllers_.pid_lin[i].control(pos_error, dt);
+                beta(i) = controllers_.cart_ctrl[i].control(pos_error, dt);
                 if (i == 2)
                 {
                     printf("Position error in z: %f, velocity: %f, beta: %f\n", pos_error, ee_twist.vel[i], beta(i));
@@ -83,37 +82,74 @@ void ComputeControllerCommand::compute(
         {
         case OrientationMode::Position:
         {
-            KDL::Vector diff = KDL::diff(
-                                        kin.pose().M,
-                                        KDL::Rotation::RPY(
-                                        task.orientation.rpy[0],
-                                        task.orientation.rpy[1],
-                                        task.orientation.rpy[2]));
+            KDL::Rotation desired_ee_rot_ = KDL::Rotation::RPY(
+                                            task.orientation.rpy[0],
+                                            task.orientation.rpy[1],
+                                            task.orientation.rpy[2]);
+            KDL::Vector diff = KDL::diff(kin.pose().M,desired_ee_rot_);
 
             int seg = task.orientation.segment_index;
 
+            // printf("[Current orientation] RPY: [%f, %f, %f]\n", kin.rpy()[0], kin.rpy()[1], kin.rpy()[2]);
+            // printf("[Desired orientation] the desired rotation matrix: \n");
+            // printf("%f, %f, %f\n", 
+            //     desired_ee_rot_(0,0), desired_ee_rot_(0,1), desired_ee_rot_(0,2));
+            // printf("%f, %f, %f\n", 
+            //     desired_ee_rot_(1,0), desired_ee_rot_(1,1), desired_ee_rot_(1,2));
+            // printf("%f, %f, %f\n", 
+            //     desired_ee_rot_(2,0), desired_ee_rot_(2,1), desired_ee_rot_(2,2));
+
+            printf("[Orientation control]: RPY error [%f, %f, %f]\n", diff(0), diff(1), diff(2));
+
             for (int i = 0; i < 3; ++i){
-                if (seg == 7) // if controlling at the end-effector, using beta
-                    beta(3 + i) = controllers_.ori_ctrl[i].control(diff(i));
-                else // if controlling at a different segment, usoing fext interface to apply torques
+                if (seg == 8) // if controlling at the end-effector, using beta
                 {
-                    f_ext[seg](3 + i) = controllers_.ori_ctrl[i].control(diff(i));
+                    f_ext[seg](3 + i) = - controllers_.cart_ctrl[i+3].control(diff(i));
+                    printf("[Orientation control]: external torque for axis %d: %f\n", i, f_ext[seg](3 + i));
+                    // beta(3 + i) = controllers_.cart_ctrl[i+3].control(diff(i));
+                    // printf("[Orientation control]: beta for axis %d: %f\n", i, beta(3 + i));
+                }
+                else // if controlling at a different segment, using fext interface to apply torques
+                {
+                    f_ext[seg](3 + i) = - controllers_.cart_ctrl[i+3].control(diff(i));
                 }
             }
 
+            // f_ext[seg](3) = 0.0;
+            // f_ext[seg](4) = 0.0;
+            // f_ext[seg](5) = 0.0;
             break;
         }
+/*
+Joint torque 0: -1.900364
+Joint torque 1: -17.685926
+Joint torque 2: 0.671052
+Joint torque 3: -0.201990
+Joint torque 4: -0.444029
+Joint torque 5: 2.143482
+Joint torque 6: -0.088416
 
+
+Joint torque 0: -1.538493
+Joint torque 1: -13.521361
+Joint torque 2: 0.550724
+Joint torque 3: -0.078451
+Joint torque 4: -0.466335
+Joint torque 5: 2.138829
+Joint torque 6: 0.006506
+
+*/
         case OrientationMode::Velocity:
         {
             int seg = task.orientation.segment_index;
 
             for (int i = 0; i < 3; ++i){
-                if (seg == 7) // if controlling at the end-effector, using beta
-                    beta(3 + i) = controllers_.ori_ctrl[i].control(task.orientation.ang_vel[i] - ee_twist.rot[i]);
+                if (seg == 8) // if controlling at the end-effector, using beta
+                    beta(3 + i) = controllers_.cart_ctrl[i+3].control(task.orientation.ang_vel[i] - ee_twist.rot[i]);
                 else // if controlling at a different segment, we use the velocity error to compute desired angular velocity for damping control
-                    f_ext[seg](3 + i) = -controllers_.ori_ctrl[i].control(task.orientation.ang_vel[i] - ee_twist.rot[i]);
+                    f_ext[seg](3 + i) = -controllers_.cart_ctrl[i+3].control(task.orientation.ang_vel[i] - ee_twist.rot[i]);
             }
+
             break;
         }
 
@@ -186,7 +222,7 @@ void ComputeControllerCommand::compute(
         torque_magnitude = -torque_limit_forearm_link;
         }
 
-        // transform torque axis to forearm link frame
+        // transform torque axis to forearm link frame (not used)
         KDL::Vector torque_axis_forearm_link = kin.forearmPoseBL().M.Inverse() * torque_axis;
 
         // achd solver takes wrenches in base link frame

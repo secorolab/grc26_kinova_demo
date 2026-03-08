@@ -27,16 +27,40 @@ linear_vel_pid:
     lp_filter_alpha: 0.01
     saturation_limit: 10.0
 
-orientation_stiffness:
-  roll: 0 #100.0
-  pitch: 0 #100.0
-  yaw: 0 #100.0
+orientation_ctrl:
+  x:
+    kp: 25.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.7
+    decay_rate: 0.9
+    dead_zone_limit: 0.05
+    lp_filter_alpha: 0.01
+    saturation_limit: 15.0
+  y:
+    kp: 25.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.7
+    decay_rate: 0.9
+    dead_zone_limit: 0.05
+    lp_filter_alpha: 0.01
+    saturation_limit: 15.0
+  z:
+    kp: 0.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.7
+    decay_rate: 0.9
+    dead_zone_limit: 0.05
+    lp_filter_alpha: 0.01
+    saturation_limit: 0.0
 
 
 joint_position_stiffness:
-  joint_1: 0.0
-  joint_2: 0.0
-  joint_3: 0.0
-  joint_4: 0.0
-  joint_5: 0.0
-  joint_6: 0.0
+  joint_1: 70.0
+  joint_2: 70.0
+  joint_3: 70.0
+  joint_4: 70.0
+  joint_5: 70.0
+  joint_6: 70.0

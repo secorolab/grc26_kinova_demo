@@ -48,7 +48,11 @@
 #define NUM_JOINTS 7
 
 #define KINOVA_TAU_CMD_LIMIT 30.0
-
+// To avoid singularity, using -45.0 (lt), when starting from 'B' joystick position
+#define JOINT_3_ANGLE_LIMIT_DEG_UL -45      // 147.83 (lt)
+#define JOINT_3_ANGLE_LIMIT_DEG_LL -144     // -148.8 (gt)
+#define JOINT_5_ANGLE_LIMIT_DEG_UL 116.0    // 120.32 (lt)
+#define JOINT_5_ANGLE_LIMIT_DEG_LL -117.0   //-121 (gt)
 
 class FSMInterface
 {
@@ -76,6 +80,7 @@ public:
   void release_object_behavior_config(events *eventData, SystemState& system_state);
   void check_post_condition(events *eventData, const SystemState& system_state, const TaskSpec& task_spec);
   void exit(events *eventData, SystemState& system_state);
+  void avoid_joint_limits(SystemState& system_state);
 
   // decision of which behavior to execute based on events and arm state
   void fsm_behavior(events *eventData, SystemState& system_state);
@@ -106,7 +111,6 @@ private:
   ControllerConfig ctr_config_release_object;
   ComputeControllerCommand compute_ctr_cmd_obj;
   bool task_triggered = false;
-  bool to_log = false;
 
   bool in_comm_with_hw;
   e_states fsm_execution_state;

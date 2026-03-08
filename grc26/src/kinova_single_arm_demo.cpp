@@ -223,15 +223,14 @@ int main(int argc, char ** argv)
 
       // log FT sensor state
       if (system_state.ft_sensor.present) {
-        LOG_INFO(node, "FT sensor state (wrt FT link): fx=%.2f, fy=%.2f, fz=%.2f",
+        LOG_INFO(node, "F: [%6.2f, %6.2f, %6.2f] N  T: [%6.3f, %6.3f, %6.3f] Nm\n",
                 system_state.ft_sensor.wrench[0],
                 system_state.ft_sensor.wrench[1],
-                system_state.ft_sensor.wrench[2]);
-                //  system_state.ft_sensor.fx,
-                //  system_state.ft_sensor.fy,
-                //  system_state.ft_sensor.fz);
+                system_state.ft_sensor.wrench[2],
+                system_state.ft_sensor.wrench[3],
+                system_state.ft_sensor.wrench[4],
+                system_state.ft_sensor.wrench[5]);
       }
-
       cycles_since_stats_log = 0;
       max_abs_jitter_us = 0.0;
       last_stats_log_time = now;

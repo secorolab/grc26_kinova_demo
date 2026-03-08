@@ -70,7 +70,7 @@ bool FSMInterface::update_ft_force_estimate(const SystemState& system_state,
   for (int axis = 0; axis < 6; ++axis) {
     raw_wrench[axis] = static_cast<double>(system_state.ft_sensor.wrench_BL[axis]);
     if (!std::isfinite(raw_wrench[axis])) {
-      if (to_log) {
+      if (true) {
         printf("Skipping non-finite FT sample on axis %d\n", axis);
       }
       return false;
@@ -94,7 +94,7 @@ bool FSMInterface::update_ft_force_estimate(const SystemState& system_state,
       for (auto& sample : ft_window_samples_) {
         sample.fill(0.0);
       }
-      if (to_log) {
+      if (true) {
         printf("FT reference captured from %zu samples\n", ft_reference_count_);
       }
     }
@@ -136,6 +136,40 @@ void FSMInterface::normalize_angle_diff(double& angle_diff)
   }
   else if (angle_diff < -M_PI) {
     angle_diff += 2 * M_PI;
+  }
+}
+
+void FSMInterface::avoid_joint_limits(SystemState& system_state)
+{
+  double stiffness = 150.0; // Nm/rad
+
+  // normalize joint angles at indices 3,5 to be within [-180,180]
+  for (int joint_index : {3, 5}) {
+    double angle_deg = system_state.arm.q[joint_index];
+    if (angle_deg > M_PI) {
+      system_state.arm.q[joint_index] -= 2 * M_PI;
+    }
+    else if (angle_deg < -M_PI) {
+      system_state.arm.q[joint_index] += 2 * M_PI;
+    }
+  }
+
+  double jnt_3_angle_ul_rad = JOINT_3_ANGLE_LIMIT_DEG_UL * M_PI / 180.0;
+  double jnt_3_angle_ll_rad = JOINT_3_ANGLE_LIMIT_DEG_LL * M_PI / 180.0;
+  double jnt_5_angle_ll_rad = JOINT_5_ANGLE_LIMIT_DEG_LL * M_PI / 180.0;
+  double jnt_5_angle_ul_rad = JOINT_5_ANGLE_LIMIT_DEG_UL * M_PI / 180.0;
+
+  if (system_state.arm.q[3] > jnt_3_angle_ul_rad) {
+    system_state.arm.tau_cmd[3] = stiffness * (jnt_3_angle_ul_rad - system_state.arm.q[3]);
+  }
+  else if (system_state.arm.q[3] < jnt_3_angle_ll_rad) {
+    system_state.arm.tau_cmd[3] = stiffness * (jnt_3_angle_ll_rad - system_state.arm.q[3]);
+  }
+  if (system_state.arm.q[5] > jnt_5_angle_ul_rad) {
+    system_state.arm.tau_cmd[5] = stiffness * (jnt_5_angle_ul_rad - system_state.arm.q[5]);
+  }
+  else if (system_state.arm.q[5] < jnt_5_angle_ll_rad) {
+    system_state.arm.tau_cmd[5] = stiffness * (jnt_5_angle_ll_rad - system_state.arm.q[5]);
   }
 }
 
@@ -207,7 +241,8 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
   {
     printf("Post condition met\n");
     if (fsm_execution_state == S_M_TOUCH_TABLE){
-      produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
+      produce_event(eventData, E_ENTER_IDLE);
+      // produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
       printf("Completed touch table behavior\n");
     }
     else if (fsm_execution_state == S_M_SLIDE_ALONG_TABLE){

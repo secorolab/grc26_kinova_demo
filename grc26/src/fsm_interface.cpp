@@ -2,8 +2,6 @@
 
 #include <cmath>
 
-#define KINOVA_TAU_CMD_LIMIT 20.0
-
 FSMInterface::FSMInterface(SystemState& system_state,
                            robif2b_kinova_gen3_nbx& rob, 
                            robif2b_kg3_robotiq_gripper_nbx& gripper,
@@ -134,6 +132,7 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
   if (!task_triggered) 
   {
     task_triggered = true;
+    // produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
     produce_event(eventData, E_M_COLLABORATE_CONFIG);
   }
 
@@ -153,8 +152,8 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
   */
   compute_ctr_cmd_obj.setGains(ctr_config_idle.controllers());
   task_spec.resetDefault();
-  bool use_joint_pos_stiffness_ctrl = false;
-  bool use_vel_ctrl = true; // if false, use position control
+  bool use_joint_pos_stiffness_ctrl = true;
+  bool use_vel_ctrl = false; // if false, use position control
 
   if (use_joint_pos_stiffness_ctrl)
   {
@@ -175,7 +174,7 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
 
     task_spec.orientation.enabled = true;
     task_spec.orientation.mode = OrientationMode::Velocity;
-    task_spec.orientation.segment_index = 7; // control orientation at the end-effector
+    task_spec.orientation.segment_index = 8; // control orientation at the end-effector
     task_spec.orientation.ang_vel[0] = 0.0;  // rad/s
     task_spec.orientation.ang_vel[1] = 0.0;  // rad/s
     task_spec.orientation.ang_vel[2] = 0.0;  // rad/s
@@ -192,7 +191,7 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
 
     task_spec.orientation.enabled = true;
     task_spec.orientation.mode = OrientationMode::Position;
-    task_spec.orientation.segment_index = 7; // control orientation at the end-effector
+    task_spec.orientation.segment_index = 8; // control orientation at the end-effector
 
     double roll, pitch, yaw;
     arm_kinematics_->pose().M.GetRPY(roll, pitch, yaw);
@@ -212,37 +211,49 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
 void FSMInterface::execute(events *eventData, SystemState& system_state){
 
   std::array<double, 6> corrected_external_wrench{};
-  printf("ft_sensor readings: fx=%f, fy=%f, fz=%f, tx=%f, ty=%f, tz=%f\n",
-          system_state.ft_sensor.wrench[0],
-          system_state.ft_sensor.wrench[1],
-          system_state.ft_sensor.wrench[2],
-          system_state.ft_sensor.wrench[3],
-          system_state.ft_sensor.wrench[4],
-          system_state.ft_sensor.wrench[5]);
+  if (false) printf("ft_sensor readings: fx=%f, fy=%f, fz=%f, tx=%f, ty=%f, tz=%f\n",
+            system_state.ft_sensor.wrench[0],
+            system_state.ft_sensor.wrench[1],
+            system_state.ft_sensor.wrench[2],
+            system_state.ft_sensor.wrench[3],
+            system_state.ft_sensor.wrench[4],
+            system_state.ft_sensor.wrench[5]);
   const bool has_corrected_wrench = update_ft_force_estimate(system_state, corrected_external_wrench);
 
-  if (to_log) printf("EE pose: [%f, %f, %f]\n", arm_kinematics_->pose().p.x(), arm_kinematics_->pose().p.y(), arm_kinematics_->pose().p.z());
+  if (false) printf("EE pose: [%f, %f, %f]\n", arm_kinematics_->pose().p.x(), arm_kinematics_->pose().p.y(), arm_kinematics_->pose().p.z());
 
   if (task_spec.ee_linear.enabled || task_spec.orientation.enabled || 
      task_spec.link_force.enabled || task_spec.forearm_yaw_control_enabled) {
-    compute_ctr_cmd_obj.compute(
-        system_state,
-        *arm_kinematics_,
-        task_spec,
-        solver_->beta(),
-        solver_->externalWrenches());
 
     solver_->setState(system_state);
 
-    if (task_spec.collaborate_spec.enabled && has_corrected_wrench) {
-      auto& fext_wrenches =  solver_->externalWrenches_fext_solver(); // f_ext_fext_;
-      if (!fext_wrenches.empty()) {
-        auto& ee_external_wrench = fext_wrenches.back();
-        for (int axis = 0; axis < 6; ++axis) {
-          ee_external_wrench(axis) = 0.0;
+    // print joint positions
+    if (false) {
+      printf("Joint positions: [");
+      for (int i = 0; i < NUM_JOINTS; ++i) {
+        printf("%f", system_state.arm.q[i]);
+        if (i < NUM_JOINTS - 1) {
+          printf(", ");
         }
+      }
+      printf("]\n");
+    }
 
-        if (true) {
+    if (task_spec.collaborate_spec.enabled) {
+      if (!system_state.ft_sensor.present) {
+        printf("[Warning] Collaboration enabled but FT sensor not present\n");
+      }
+    }
+    if (task_spec.collaborate_spec.enabled && has_corrected_wrench) 
+    {
+      auto& fext_wrenches =  solver_->externalWrenches_fext_solver(); // f_ext_fext_;
+      if (!fext_wrenches.empty()) 
+      {
+        auto& ee_external_wrench = fext_wrenches.back();
+        for (int axis = 0; axis < 6; ++axis) ee_external_wrench(axis) = 0.0;
+
+        if (true) 
+        {
           printf("Reference external wrench: fx=%8.2f, fy=%8.2f, fz=%8.2f, tx=%8.2f, ty=%8.2f, tz=%8.2f\n",
                 ft_reference_mean_[0], ft_reference_mean_[1], ft_reference_mean_[2],
                 ft_reference_mean_[3], ft_reference_mean_[4], ft_reference_mean_[5]);
@@ -251,15 +262,15 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
                 corrected_external_wrench[3], corrected_external_wrench[4], corrected_external_wrench[5]);
         }
 
-        printf("Checking if hs_collaborate_spec enabled: %d\n", task_spec.collaborate_spec.enabled);
-        if (has_corrected_wrench) {
+        if (has_corrected_wrench) 
+        {
           const double scale            = task_spec.collaborate_spec.magnification_factor;
           const double saturation_limit = task_spec.collaborate_spec.f_ext_saturation_limit;
 
           for (int axis = 0; axis < 3; ++axis) { // TODO? only apply external wrench in linear axes for now
             corrected_external_wrench[axis] = std::max(0.0, std::abs(corrected_external_wrench[axis]) - task_spec.collaborate_spec.external_force_deadband) *
                                              ((corrected_external_wrench[axis] > 0) ? 1.0 : -1.0);
-            const double external_wrench_unsat = -scale * corrected_external_wrench[axis];
+            const double external_wrench_unsat = scale * corrected_external_wrench[axis];
             ee_external_wrench(axis) = std::max(std::min(external_wrench_unsat, saturation_limit), -saturation_limit);
             printf("Axis %d: raw=%8.2f, corrected=%8.2f, unsat_cmd=%8.2f, final_cmd=%8.2f\n", axis, system_state.ft_sensor.wrench_BL[axis], corrected_external_wrench[axis], external_wrench_unsat, ee_external_wrench(axis));
             if (true) {
@@ -272,14 +283,31 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
       solver_->computeTorquesFext();
       if (true) {
         for (int i = 0; i < 7; ++i) {
-          // printf("[1] Joint torque from fext solver on joint %d: %f\n", i, tau_cmd_fext_(i));
-          printf("[1] Joint torque from fext solver on joint %d: %f\n", i, solver_->tauCmdFext()(i));
+          printf("[Collaborate] Joint torque from fext solver on joint %d: %f\n", i, solver_->tauCmdFext()(i));
         }
       }
     }
+    // get beta and f_ext based on task_spec and current state using controllers
+    compute_ctr_cmd_obj.compute(
+        system_state,
+        *arm_kinematics_,
+        task_spec,
+        solver_->beta(),
+        solver_->externalWrenches());
 
+    printf("[EE Velocity] : [%f, %f, %f]\n", arm_kinematics_->twist().vel.x(), arm_kinematics_->twist().vel.y(), arm_kinematics_->twist().vel.z());
+    printf("[Beta command] : [%f, %f, %f, %f, %f, %f]\n", solver_->beta()(0), solver_->beta()(1), solver_->beta()(2), solver_->beta()(3), solver_->beta()(4), solver_->beta()(5));
+    printf("[External wrench command @ EE] : fx=%f, fy=%f, fz=%f, tx=%f, ty=%f, tz=%f\n",
+            solver_->externalWrenches().back()(0),
+            solver_->externalWrenches().back()(1),
+            solver_->externalWrenches().back()(2),
+            solver_->externalWrenches().back()(3),
+            solver_->externalWrenches().back()(4),
+            solver_->externalWrenches().back()(5));
+
+    // computeTorques adds torques from vn_fixed_joint and vn_fext solvers
     solver_->computeTorques();
-    solver_->updateTorqueCmdInState(system_state); // this adds torque from vn_fixed_joint and vn_fext solvers and updates system_state.arm.tau_cmd
+    solver_->updateTorqueCmdInState(system_state);
     solver_->resetTorqueOutputs();
   }
   else if (task_spec.joint_position.enabled) {
@@ -287,7 +315,7 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
     {
       double position_error = task_spec.joint_position.position[i] - system_state.arm.q[i];
       normalize_angle_diff(position_error);
-      if (to_log) printf("Joint %d position error: %f\n", i, position_error);
+      if (false) printf("Joint %d position error: %f\n", i, position_error);
       system_state.arm.tau_cmd[i] = 70.0 * position_error;
     }
   }
@@ -300,11 +328,12 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
   // clamp joint torques
   for (int i = 0; i < NUM_JOINTS; ++i)
   {
-    if (true) {
-      printf("Joint torque %d: %f\n", i, system_state.arm.tau_cmd[i]);
+    if (false) {
+      printf("[Joint torque] capped at %f; [%d]: %f\n", KINOVA_TAU_CMD_LIMIT, i, system_state.arm.tau_cmd[i]);
     }
+    avoid_joint_limits(system_state);
     system_state.arm.tau_cmd[i] = std::max(std::min(system_state.arm.tau_cmd[i], KINOVA_TAU_CMD_LIMIT), -KINOVA_TAU_CMD_LIMIT);
-    // set zero joint torques while testing
+    // set torque to zero while testing
     // system_state.arm.tau_cmd[i] = 0.0;
   }
 
@@ -329,8 +358,8 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
     }
   }
 
-  // FT sensor is updated in a separate 100 Hz thread. Use cached state here only.
-  if (to_log && system_state.ft_sensor.present)
+  // FT sensor is updated in a separate 100 Hz thread. Using cached state
+  if (false && system_state.ft_sensor.present)
   {
     printf("FT sensor readings: fx=%f, fy=%f, fz=%f, tx=%f, ty=%f, tz=%f\n", 
       system_state.ft_sensor.fx, system_state.ft_sensor.fy, system_state.ft_sensor.fz, 
@@ -355,28 +384,33 @@ void FSMInterface::touch_table_behavior_config(events *eventData, SystemState& s
 
   task_spec.ee_linear.velocity[0] = 0.0; // m/s
   task_spec.ee_linear.velocity[1] = 0.0; // m/s
-  task_spec.ee_linear.velocity[2] = -0.02; // m/s
+  task_spec.ee_linear.velocity[2] = 0.02; // m/s
 
   task_spec.orientation.enabled = true;
-  task_spec.orientation.mode = OrientationMode::Velocity;
-  task_spec.orientation.segment_index = 7; // control orientation at the end-effector
-  task_spec.orientation.ang_vel[0] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[1] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[2] = 0.0;  // rad/s
+  task_spec.orientation.mode = OrientationMode::Position;
+  task_spec.orientation.segment_index = 8; // control orientation at the end-effector
+  task_spec.orientation.rpy[0] = -M_PI / 2;
+  task_spec.orientation.rpy[1] = 0.0;
+  task_spec.orientation.rpy[2] = -M_PI / 2;
 
   task_spec.post_condition.available = true;
-  task_spec.post_condition.num_constraints = 2;
+  task_spec.post_condition.num_constraints = 1;
   task_spec.post_condition.logic = LogicOp::And;
 
   task_spec.post_condition.constraints[0].type = ConstraintType::Position;
   task_spec.post_condition.constraints[0].axis = 2;     // z-axis
-  task_spec.post_condition.constraints[0].op = CompareOp::LessEqual;
-  task_spec.post_condition.constraints[0].value = 0.06; // m
+  task_spec.post_condition.constraints[0].op = CompareOp::GreaterEqual;
+  task_spec.post_condition.constraints[0].value = 0.5; // m
 
-  task_spec.post_condition.constraints[1].type = ConstraintType::Velocity;
-  task_spec.post_condition.constraints[1].axis = 2;     // z-axis
-  task_spec.post_condition.constraints[1].op = CompareOp::LessEqual;
-  task_spec.post_condition.constraints[1].value = 0.01; // m/s
+  // task_spec.post_condition.constraints[0].type = ConstraintType::Position;
+  // task_spec.post_condition.constraints[0].axis = 2;     // z-axis
+  // task_spec.post_condition.constraints[0].op = CompareOp::LessEqual;
+  // task_spec.post_condition.constraints[0].value = 0.06; // m
+
+  // task_spec.post_condition.constraints[1].type = ConstraintType::Velocity;
+  // task_spec.post_condition.constraints[1].axis = 2;     // z-axis
+  // task_spec.post_condition.constraints[1].op = CompareOp::LessEqual;
+  // task_spec.post_condition.constraints[1].value = 0.01; // m/s
 
   produce_event(eventData, E_M_TOUCH_TABLE_CONFIGURED);
 }
@@ -396,19 +430,12 @@ void FSMInterface::slide_on_table_behavior_config(events *eventData, SystemState
   task_spec.ee_linear.velocity[1] = 0.0;      // m/s
   task_spec.ee_linear.force[2]    = -5.0;     // N
 
-  // task_spec.orientation.enabled = true;
-  // task_spec.orientation.segment_index = 7; // control orientation at the end-effector
-  // task_spec.orientation.mode = OrientationMode::Position;
-  // task_spec.orientation.rpy[0] = 0.0; // roll
-  // task_spec.orientation.rpy[1] = 0.0; // pitch
-  // task_spec.orientation.rpy[2] = 0.0; // yaw
-
   task_spec.orientation.enabled = true;
-  task_spec.orientation.mode = OrientationMode::Velocity;
-  task_spec.orientation.segment_index = 7; // control orientation at the end-effector
-  task_spec.orientation.ang_vel[0] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[1] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[2] = 0.0;  // rad/s
+  task_spec.orientation.mode = OrientationMode::Position;
+  task_spec.orientation.segment_index = 8; // control orientation at the end-effector
+  task_spec.orientation.rpy[0] = -M_PI / 2;
+  task_spec.orientation.rpy[1] = 0.0;
+  task_spec.orientation.rpy[2] = -M_PI / 2;
 
   task_spec.post_condition.available = true;
   task_spec.post_condition.num_constraints = 1;
@@ -444,11 +471,11 @@ void FSMInterface::grasp_object_behavior_config(events *eventData, SystemState& 
   task_spec.ee_linear.velocity[2] = 0.0; // m/s
 
   task_spec.orientation.enabled = true;
-  task_spec.orientation.mode = OrientationMode::Velocity;
-  task_spec.orientation.segment_index = 7; // control ang velocity at the end-effector
-  task_spec.orientation.ang_vel[0] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[1] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[2] = 0.0;  // rad/s
+  task_spec.orientation.mode = OrientationMode::Position;
+  task_spec.orientation.segment_index = 8; // control orientation at the end-effector
+  task_spec.orientation.rpy[0] = -M_PI / 2;
+  task_spec.orientation.rpy[1] = 0.0;
+  task_spec.orientation.rpy[2] = -M_PI / 2;
 
   task_spec.gripper.enabled = true;
   task_spec.gripper.position = 95.0; // fully closed
@@ -479,19 +506,19 @@ void FSMInterface::collaborate_behavior_config(events *eventData, SystemState& s
 
   task_spec.ee_linear.velocity[0] = 0.0; // m/s
   task_spec.ee_linear.velocity[1] = 0.0; // m/s
-  task_spec.ee_linear.velocity[2] = 0.0; // m/s
+  task_spec.ee_linear.velocity[2] = -0.02; // m/s
 
   task_spec.orientation.enabled = true;
-  task_spec.orientation.mode = OrientationMode::Velocity;
-  task_spec.orientation.segment_index = 7; // control angular velocity at the end-effector
-  task_spec.orientation.ang_vel[0] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[1] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[2] = 0.0;  // rad/s
+  task_spec.orientation.mode = OrientationMode::Position;
+  task_spec.orientation.segment_index = 8; // control orientation at the end-effector
+  task_spec.orientation.rpy[0] = -M_PI / 2;
+  task_spec.orientation.rpy[1] = 0.0;
+  task_spec.orientation.rpy[2] = -M_PI / 2;
 
-  task_spec.collaborate_spec.enabled = true;
-  task_spec.collaborate_spec.magnification_factor = 7.0; // scale
+  task_spec.collaborate_spec.enabled = false;
+  task_spec.collaborate_spec.magnification_factor = 7.0;     // scale
   task_spec.collaborate_spec.external_force_deadband  = 7.0; // N
-  task_spec.collaborate_spec.f_ext_saturation_limit = 15.0; // N
+  task_spec.collaborate_spec.f_ext_saturation_limit = 15.0;  // N
 
   task_spec.post_condition.available = true;
   task_spec.post_condition.num_constraints = 1;
@@ -521,11 +548,11 @@ void FSMInterface::release_object_behavior_config(events *eventData, SystemState
   task_spec.ee_linear.velocity[2] = 0.0; // m/s
 
   task_spec.orientation.enabled = true;
-  task_spec.orientation.mode = OrientationMode::Velocity;
-  task_spec.orientation.segment_index = 7; // control angular velocity at the end-effector
-  task_spec.orientation.ang_vel[0] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[1] = 0.0;  // rad/s
-  task_spec.orientation.ang_vel[2] = 0.0;  // rad/s
+  task_spec.orientation.mode = OrientationMode::Position;
+  task_spec.orientation.segment_index = 8; // control orientation at the end-effector
+  task_spec.orientation.rpy[0] = -M_PI / 2;
+  task_spec.orientation.rpy[1] = 0.0;
+  task_spec.orientation.rpy[2] = -M_PI / 2;
 
   task_spec.gripper.enabled = true;
   task_spec.gripper.position = 0.0; // fully open

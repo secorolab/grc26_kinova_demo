@@ -11,15 +11,13 @@
 
 struct Controllers
 {
-    std::array<PID, 3> pid_lin = {
+    std::array<PID, 6> cart_ctrl = {
+        PID(1.0, 0.0, 0.0),
+        PID(1.0, 0.0, 0.0),
+        PID(1.0, 0.0, 0.0),
         PID(1.0, 0.0, 0.0),
         PID(1.0, 0.0, 0.0),
         PID(1.0, 0.0, 0.0)
-    };
-    std::array<StiffnessController, 3> ori_ctrl = {
-        StiffnessController(1.0),
-        StiffnessController(1.0),
-        StiffnessController(1.0)
     };
 };
 

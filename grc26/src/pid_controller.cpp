@@ -4,7 +4,7 @@
 PID::PID(double p_gain,
          double i_gain,
          double d_gain,
-         double error_sum_tol,
+         double err_sum_tol,
          double decay_rate,
          double dead_zone_limit,
          double lp_filter_alpha,
@@ -15,7 +15,7 @@ PID::PID(double p_gain,
       ki(i_gain),
       kd(d_gain),
       saturation_limit(saturation_limit),
-      err_sum_tol(error_sum_tol),
+      err_sum_tol(err_sum_tol),
       decay_rate(decay_rate),
       dead_zone_limit(dead_zone_limit),
       lp_filter_alpha(lp_filter_alpha),
@@ -26,7 +26,7 @@ PID::PID(double p_gain,
 void PID::set_params(double p_gain,
                     double i_gain,
                     double d_gain,
-                    double error_sum_tol,
+                    double err_sum_tol,
                     double decay_rate,
                     double dead_zone_limit,
                     double lp_filter_alpha,
@@ -37,7 +37,7 @@ void PID::set_params(double p_gain,
     kp                    = p_gain;
     ki                    = i_gain;
     kd                    = d_gain;
-    this->err_sum_tol     = error_sum_tol;
+    this->err_sum_tol     = err_sum_tol;
     this->decay_rate      = decay_rate;
     this->dead_zone_limit = dead_zone_limit;
     this->lp_filter_alpha = lp_filter_alpha;
@@ -81,7 +81,7 @@ double PID::control(double error, double dt)
     } else if (err_integ < -err_sum_tol) {
         err_integ = -err_sum_tol;
     }
-    
+
     double out = kp * error + ki * err_integ + kd * filtered_d;
     // if (kp > 0.0)
     // {

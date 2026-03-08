@@ -78,7 +78,7 @@ struct OrientationCommand
     bool enabled     = false;
     OrientationMode mode;     // roll pitch yaw
     
-    double rpy[3]    = {0};   // used if Position
+    double rpy[3]    = {0};   // in radians; used if Position
     double torque[3] = {0};   // used if Torque
     double ang_vel[3] = {0};   // used if Velocity
     

@@ -27,7 +27,31 @@ linear_vel_pid:
     lp_filter_alpha: 0.01
     saturation_limit: 10.0
 
-orientation_stiffness:
-  roll: 100.0
-  pitch: 100.0
-  yaw: 100.0
+orientation_ctrl:
+  x:
+    kp: 25.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.7
+    decay_rate: 0.9
+    dead_zone_limit: 0.05
+    lp_filter_alpha: 0.01
+    saturation_limit: 15.0
+  y:
+    kp: 25.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.7
+    decay_rate: 0.9
+    dead_zone_limit: 0.05
+    lp_filter_alpha: 0.01
+    saturation_limit: 15.0
+  z:
+    kp: 0.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.7
+    decay_rate: 0.9
+    dead_zone_limit: 0.05
+    lp_filter_alpha: 0.01
+    saturation_limit: 0.0

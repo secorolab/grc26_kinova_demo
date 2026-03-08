@@ -109,7 +109,7 @@ bool VereshchaginSolver::initialize(unsigned int num_constraints)
   alpha_.setColumn(2, KDL::Twist(KDL::Vector(0, 0, 1), KDL::Vector(0, 0, 0))); 
   alpha_.setColumn(3, KDL::Twist(KDL::Vector(0, 0, 0), KDL::Vector(1, 0, 0))); 
   alpha_.setColumn(4, KDL::Twist(KDL::Vector(0, 0, 0), KDL::Vector(0, 1, 0))); 
-  alpha_.setColumn(5, KDL::Twist(KDL::Vector(0, 0, 0), KDL::Vector(0, 0, 1))); 
+  alpha_.setColumn(5, KDL::Twist(KDL::Vector(0, 0, 0), KDL::Vector(0, 0, 1)));
 
   alpha_fext_.setColumn(0, KDL::Twist(KDL::Vector(0, 0, 0), KDL::Vector(0, 0, 0)));
   alpha_fext_.setColumn(1, KDL::Twist(KDL::Vector(0, 0, 0), KDL::Vector(0, 0, 0))); 
