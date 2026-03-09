@@ -43,6 +43,12 @@ class EventID(IntEnum):
     E_M_GRASP_OBJECT_CONFIGURED = auto()
     E_M_COLLABORATE_CONFIG = auto()
     E_M_COLLABORATE_CONFIGURED = auto()
+    E_M_RELEASE_OBJECT_CONFIG = auto()
+    E_M_RELEASE_OBJECT_CONFIGURED = auto()
+    E_M_RETRACT_ARM_CONFIG = auto()
+    E_M_RETRACT_ARM_CONFIGURED = auto()
+    E_M_RETURN_HOME_CONFIG = auto()
+    E_M_RETURN_HOME_CONFIGURED = auto()
 
 
 # State IDs
@@ -58,6 +64,9 @@ class StateID(IntEnum):
     S_M_SLIDE_ALONG_TABLE = auto()
     S_M_GRASP_OBJECT = auto()
     S_M_COLLABORATE = auto()
+    S_M_RELEASE_OBJECT = auto()
+    S_M_RETRACT_ARM = auto()
+    S_M_RETURN_HOME = auto()
 
 
 # Transition IDs
@@ -82,6 +91,12 @@ class TransitionID(IntEnum):
     T_M_GRASP_OBJECT_EXECUTE = auto()
     T_EXECUTE_M_COLLABORATE = auto()
     T_M_COLLABORATE_EXECUTE = auto()
+    T_EXECUTE_M_RELEASE_OBJECT = auto()
+    T_M_RELEASE_OBJECT_EXECUTE = auto()
+    T_EXECUTE_M_RETRACT_ARM = auto()
+    T_M_RETRACT_ARM_EXECUTE = auto()
+    T_M_EXECUTE_RETURN_HOME = auto()
+    T_M_RETURN_HOME_EXECUTE = auto()
 
 
 # Event reaction IDs
@@ -103,6 +118,12 @@ class ReactionID(IntEnum):
     R_E_M_SLIDE_ALONG_TABLE_CONFIGURED = auto()
     R_E_M_GRASP_OBJECT_CONFIGURED = auto()
     R_E_M_COLLABORATE_CONFIGURED = auto()
+    R_E_EXECUTE_M_RELEASE_OBJECT = auto()
+    R_E_M_RELEASE_OBJECT_CONFIGURED = auto()
+    R_E_EXECUTE_M_RETRACT_ARM = auto()
+    R_E_M_RETRACT_ARM_CONFIGURED = auto()
+    R_E_EXECUTE_RETURN_HOME = auto()
+    R_E_RETURN_HOME_CONFIGURED = auto()
     R_E_STEP_START = auto()
     R_E_STEP_IDLE = auto()
     R_E_STEP_EXECUTE = auto()
@@ -132,6 +153,12 @@ def create_fsm() -> FSMData:
         TransitionID.T_M_GRASP_OBJECT_EXECUTE: Transition(StateID.S_M_GRASP_OBJECT, StateID.S_EXECUTE),
         TransitionID.T_EXECUTE_M_COLLABORATE: Transition(StateID.S_EXECUTE, StateID.S_M_COLLABORATE),
         TransitionID.T_M_COLLABORATE_EXECUTE: Transition(StateID.S_M_COLLABORATE, StateID.S_EXECUTE),
+        TransitionID.T_EXECUTE_M_RELEASE_OBJECT: Transition(StateID.S_EXECUTE, StateID.S_M_RELEASE_OBJECT),
+        TransitionID.T_M_RELEASE_OBJECT_EXECUTE: Transition(StateID.S_M_RELEASE_OBJECT, StateID.S_EXECUTE),
+        TransitionID.T_EXECUTE_M_RETRACT_ARM: Transition(StateID.S_EXECUTE, StateID.S_M_RETRACT_ARM),
+        TransitionID.T_M_RETRACT_ARM_EXECUTE: Transition(StateID.S_M_RETRACT_ARM, StateID.S_EXECUTE),
+        TransitionID.T_M_EXECUTE_RETURN_HOME: Transition(StateID.S_EXECUTE, StateID.S_M_HOME),
+        TransitionID.T_M_RETURN_HOME_EXECUTE: Transition(StateID.S_M_HOME, StateID.S_EXECUTE),
     }
     trans_list = [trans_dict[i] for i in TransitionID]
 
@@ -220,6 +247,36 @@ def create_fsm() -> FSMData:
         ReactionID.R_E_M_COLLABORATE_CONFIGURED: EventReaction(
             condition_event_index=EventID.E_M_COLLABORATE_CONFIGURED,
             transition_index=TransitionID.T_M_COLLABORATE_EXECUTE,
+            fired_event_indices=[],
+        ),
+        ReactionID.R_E_EXECUTE_M_RELEASE_OBJECT: EventReaction(
+            condition_event_index=EventID.E_M_RELEASE_OBJECT_CONFIG,
+            transition_index=TransitionID.T_EXECUTE_M_RELEASE_OBJECT,
+            fired_event_indices=[],
+        ),
+        ReactionID.R_E_M_RELEASE_OBJECT_CONFIGURED: EventReaction(
+            condition_event_index=EventID.E_M_RELEASE_OBJECT_CONFIGURED,
+            transition_index=TransitionID.T_M_RELEASE_OBJECT_EXECUTE,
+            fired_event_indices=[],
+        ),
+        ReactionID.R_E_EXECUTE_M_RETRACT_ARM: EventReaction(
+            condition_event_index=EventID.E_M_RETRACT_ARM_CONFIG,
+            transition_index=TransitionID.T_EXECUTE_M_RETRACT_ARM,
+            fired_event_indices=[],
+        ),
+        ReactionID.R_E_M_RETRACT_ARM_CONFIGURED: EventReaction(
+            condition_event_index=EventID.E_M_RETRACT_ARM_CONFIGURED,
+            transition_index=TransitionID.T_M_RETRACT_ARM_EXECUTE,
+            fired_event_indices=[],
+        ),
+        ReactionID.R_E_EXECUTE_RETURN_HOME: EventReaction(
+            condition_event_index=EventID.E_M_RETURN_HOME_CONFIG,
+            transition_index=TransitionID.T_M_EXECUTE_RETURN_HOME,
+            fired_event_indices=[],
+        ),
+        ReactionID.R_E_RETURN_HOME_CONFIGURED: EventReaction(
+            condition_event_index=EventID.E_M_RETURN_HOME_CONFIGURED,
+            transition_index=TransitionID.T_M_RETURN_HOME_EXECUTE,
             fired_event_indices=[],
         ),
         ReactionID.R_E_STEP_START: EventReaction(
