@@ -50,6 +50,7 @@ ament_export_dependencies(rosidl_default_runtime)
 
 add_executable(kinova_single_arm_demo 
                 src/achd_solver.cpp
+                src/action_server_node.cpp
                 src/arm_kdl_model.cpp
                 src/arm_kinematics.cpp
                 src/compute_controller_command.cpp
