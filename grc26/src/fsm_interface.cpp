@@ -143,7 +143,6 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
   }
 
   // TODO: update task_status accordingly throughout the behaviors
-  task_status.idle = true;
   fsm_execution_state = S_IDLE;
 
   robif2b_kinova_gen3_update(&rob);
