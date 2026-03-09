@@ -63,13 +63,16 @@ void ComputeControllerCommand::compute(
             case LinearMode::Velocity:
             {
                 double err = task.ee_linear.velocity[i] - ee_twist.vel[i];
-                beta(i) = controllers_.cart_ctrl[i].control(err, dt);
-                capture_pid_axis(i, controllers_.cart_ctrl[i], err, beta(i));
+                double ctrl_out = controllers_.cart_ctrl[i].control(err, dt);
+                beta(i) = 0.0;
+                f_ext.back()(i) = - ctrl_out; // ensure no external force in linear axes for velocity control
+                capture_pid_axis(i, controllers_.cart_ctrl[i], err, ctrl_out);
                 break;
             }
 
             case LinearMode::Position:
             {
+                printf("[WARNING!!] Position control in linear motion is not fully tested, use with caution!!\n");
                 double pos_error = task.ee_linear.position[i] - ee_pos[i];
                 // clamp pos_error with vref
                 pos_error = std::max(std::min(pos_error, task.ee_linear.vel_threshold), -task.ee_linear.vel_threshold);
@@ -89,7 +92,7 @@ void ComputeControllerCommand::compute(
 
             case LinearMode::Force:
             {
-                f_ext.back()(i) = task.ee_linear.force[i];
+                f_ext.back()(i) = - task.ee_linear.force[i];
                 break;
             }
 
@@ -136,8 +139,8 @@ void ComputeControllerCommand::compute(
                 {
                     const double pid_output = controllers_.cart_ctrl[i+3].control(rot_err, dt);
                     f_ext[seg](3 + i) = -pid_output;
-                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], rot_err, f_ext[seg](3 + i));
-                    printf("[Orientation control]: external torque for axis %d: %f\n", i, f_ext[seg](3 + i));
+                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], rot_err, pid_output);
+                    printf("[Orientation control]: external torque for axis %d: %f\n", i, pid_output);
                     // beta(3 + i) = controllers_.cart_ctrl[i+3].control(diff(i));
                     // printf("[Orientation control]: beta for axis %d: %f\n", i, beta(3 + i));
                 }
@@ -145,7 +148,7 @@ void ComputeControllerCommand::compute(
                 {
                     const double pid_output = controllers_.cart_ctrl[i+3].control(rot_err, dt);
                     f_ext[seg](3 + i) = -pid_output;
-                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], rot_err, f_ext[seg](3 + i));
+                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], rot_err, pid_output);
                 }
             }
 
@@ -154,25 +157,7 @@ void ComputeControllerCommand::compute(
             // f_ext[seg](5) = 0.0;
             break;
         }
-/*
-Joint torque 0: -1.900364
-Joint torque 1: -17.685926
-Joint torque 2: 0.671052
-Joint torque 3: -0.201990
-Joint torque 4: -0.444029
-Joint torque 5: 2.143482
-Joint torque 6: -0.088416
 
-
-Joint torque 0: -1.538493
-Joint torque 1: -13.521361
-Joint torque 2: 0.550724
-Joint torque 3: -0.078451
-Joint torque 4: -0.466335
-Joint torque 5: 2.138829
-Joint torque 6: 0.006506
-
-*/
         case OrientationMode::Velocity:
         {
             int seg = task.orientation.segment_index;
@@ -189,7 +174,7 @@ Joint torque 6: 0.006506
                     const double err = task.orientation.ang_vel[i] - ee_twist.rot[i];
                     const double pid_output = controllers_.cart_ctrl[i+3].control(err, dt);
                     f_ext[seg](3 + i) = -pid_output;
-                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], err, f_ext[seg](3 + i));
+                    capture_pid_axis(3 + i, controllers_.cart_ctrl[i+3], err, pid_output);
                 }
             }
 
@@ -230,7 +215,7 @@ Joint torque 6: 0.006506
     if (task.forearm_yaw_control_enabled)
     {
         double forearm_link_y_axis_angle_sp = 0.0;
-        double stiffness_forearm_y_axis_angle = 30.0;
+        double stiffness_forearm_y_axis_angle = 35.0;
         double deadband_forearm_y_axis_angle = 0.0;
         double torque_limit_forearm_link = 25.0;
 

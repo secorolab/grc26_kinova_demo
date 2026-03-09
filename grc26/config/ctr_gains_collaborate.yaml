@@ -1,31 +1,31 @@
 linear_vel_pid:
   x:
-    kp: 400.0
-    ki: 500. #3.0
-    kd: 1.0 #25.0
-    error_sum_tol: 0.05
+    kp: 0.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.4
     decay_rate: 0.1
-    dead_zone_limit: 0.0001
+    dead_zone_limit: 0.001
     lp_filter_alpha: 0.01
-    saturation_limit: 20.0
+    saturation_limit: 30.0
   y:
-    kp: 400.0
-    ki: 500. #3.0
-    kd: 1.0 #25.0
-    error_sum_tol: 0.05
+    kp: 0.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.4
     decay_rate: 0.1
-    dead_zone_limit: 0.0001
+    dead_zone_limit: 0.001
     lp_filter_alpha: 0.01
-    saturation_limit: 20.0
+    saturation_limit: 30.0
   z:
-    kp: 400.0
-    ki: 500. #3.0
-    kd: 1.0 #25.0
-    error_sum_tol: 0.05
+    kp: 0.0
+    ki: 0.0
+    kd: 0.0
+    error_sum_tol: 0.4
     decay_rate: 0.1
-    dead_zone_limit: 0.0001
+    dead_zone_limit: 0.001
     lp_filter_alpha: 0.01
-    saturation_limit: 20.0
+    saturation_limit: 30.0
 
 orientation_ctrl:
   x:
@@ -55,3 +55,34 @@ orientation_ctrl:
     dead_zone_limit: 0.05
     lp_filter_alpha: 0.01
     saturation_limit: 0.0
+
+
+# Used for V'n solver
+# linear_vel_pid:
+#   x:
+#     kp: 400.0
+#     ki: 500. #3.0
+#     kd: 1.0 #25.0
+#     error_sum_tol: 0.05
+#     decay_rate: 0.1
+#     dead_zone_limit: 0.0001
+#     lp_filter_alpha: 0.01
+#     saturation_limit: 20.0
+#   y:
+#     kp: 400.0
+#     ki: 500. #3.0
+#     kd: 1.0 #25.0
+#     error_sum_tol: 0.05
+#     decay_rate: 0.1
+#     dead_zone_limit: 0.0001
+#     lp_filter_alpha: 0.01
+#     saturation_limit: 20.0
+#   z:
+#     kp: 400.0
+#     ki: 500. #3.0
+#     kd: 1.0 #25.0
+#     error_sum_tol: 0.05
+#     decay_rate: 0.1
+#     dead_zone_limit: 0.0001
+#     lp_filter_alpha: 0.01
+#     saturation_limit: 20.0

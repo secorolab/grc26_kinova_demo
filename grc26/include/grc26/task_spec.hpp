@@ -121,6 +121,7 @@ struct TaskSpec
     LinkLinearForceCommand link_force;
     GripperCommand         gripper;
     PostCondition          post_condition;
+    bool follow_trajectory = false;
     bool forearm_yaw_control_enabled = false; // if true, will control forearm yaw to be constant throughout the task
     std::string controller_config_path = "controller_gains.yaml";
 

@@ -1,26 +1,27 @@
-#ifndef TRAJECTORY_HPP
-#define TRAJECTORY_HPP
+#ifndef TRAJECTORY_GENERATOR_HPP
+#define TRAJECTORY_GENERATOR_HPP
 
 #include <memory>
 #include "kdl/frames.hpp"
-#include "kdl/trajectory_segment.hpp"
+#include "kdl/trajectory.hpp"
 
-class Trajectory {
+class TrajectoryGenerator
+{
 public:
-    Trajectory(
+    TrajectoryGenerator(
         KDL::Frame start_pose,
         KDL::Frame end_pose,
         double max_vel,
         double max_acc
     );
 
-    KDL::Trajectory_Segment& get() { return *trajectory_; }
+    KDL::Trajectory& get() { return *trajectory_; }
 
 private:
     KDL::Frame start_pose_;
     KDL::Frame end_pose_;
-    std::unique_ptr<KDL::Trajectory_Segment> trajectory_;
+    std::unique_ptr<KDL::Trajectory> trajectory_;
 
 };
 
-#endif // TRAJECTORY_HPP
+#endif // TRAJECTORY_GENERATOR_HPP

@@ -1,31 +1,31 @@
 linear_vel_pid:
   x:
-    kp: 100.0
-    ki: 3.0
-    kd: 10.0
-    error_sum_tol: 0.7
-    decay_rate: 0.007
-    dead_zone_limit: 0.005
-    lp_filter_alpha: 0.01
-    saturation_limit: 0.5
+    kp: 750.0
+    ki: 100.0
+    kd: 2.0
+    error_sum_tol: 0.4
+    decay_rate: 0.1
+    dead_zone_limit: 0.001
+    lp_filter_alpha: 0.02
+    saturation_limit: 30.0
   y:
-    kp: 100.0
-    ki: 3.0
-    kd: 10.0
-    error_sum_tol: 0.7
-    decay_rate: 0.007
-    dead_zone_limit: 0.005
-    lp_filter_alpha: 0.01
-    saturation_limit: 0.5
+    kp: 650.0
+    ki: 100.0
+    kd: 2.0
+    error_sum_tol: 0.4
+    decay_rate: 0.1
+    dead_zone_limit: 0.001
+    lp_filter_alpha: 0.02
+    saturation_limit: 30.0
   z:
-    kp: 100.0
-    ki: 3.0
-    kd: 10.0
-    error_sum_tol: 0.7
-    decay_rate: 0.007
-    dead_zone_limit: 0.005
-    lp_filter_alpha: 0.01
-    saturation_limit: 0.5
+    kp: 550.0
+    ki: 50.0
+    kd: 2.0
+    error_sum_tol: 0.4
+    decay_rate: 0.1
+    dead_zone_limit: 0.001
+    lp_filter_alpha: 0.02
+    saturation_limit: 30.0
 
 orientation_ctrl:
   x:

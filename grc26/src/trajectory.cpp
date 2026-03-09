@@ -1,9 +1,10 @@
 #include "grc26/trajectory.hpp"
 #include "kdl/path_circle.hpp"
 #include "kdl/rotational_interpolation_sa.hpp"
+#include "kdl/trajectory_segment.hpp"
 #include "kdl/velocityprofile_trap.hpp"
 
-Trajectory::Trajectory(
+TrajectoryGenerator::TrajectoryGenerator(
     KDL::Frame start_pose,
     KDL::Frame end_pose,
     double max_vel,

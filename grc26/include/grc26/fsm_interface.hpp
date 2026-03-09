@@ -45,6 +45,7 @@
 #include "grc26/arm_kinematics.hpp"
 #include "grc26/controller_config.hpp"
 #include "grc26/debug_signals.hpp"
+#include "grc26/trajectory.hpp"
 
 #define NUM_JOINTS 7
 
@@ -87,11 +88,14 @@ public:
   void fsm_behavior(events *eventData, SystemState& system_state);
 
   void normalize_angle_diff(double& angle_diff);
+  void compute_trajectory();
+  void human_interaction_monitoring(double corrected_external_force_magnitude);
   void transform_ft_readings_to_BL_update_state(SystemState& system_state,
                                                ArmKinematics& arm_kinematics);
   void reset_ft_force_estimator();
   bool update_ft_force_estimate(const SystemState& system_state,
-                                std::array<double, 6>& corrected_force_mean);
+                                            std::array<double, 6>& corrected_ft_wrt_init_ref,
+                                            std::array<double,6>& corrected_ft_wrt_prev_ref);
   void run_fsm();
   bool getLatestDebugSample(DebugSample& out) const;
 
@@ -110,9 +114,20 @@ private:
   ControllerConfig ctr_config_slide_on_table;
   ControllerConfig ctr_config_grasp_object;
   ControllerConfig ctr_config_collaborate;
+  ControllerConfig ctr_config_traj_tracking;
   ControllerConfig ctr_config_release_object;
   ComputeControllerCommand compute_ctr_cmd_obj;
   bool task_triggered = false;
+
+  KDL::Frame final_ee_pose_;
+  std::unique_ptr<TrajectoryGenerator> trajectory_object_;
+  KDL::Trajectory* trajectory_ = nullptr;
+  bool is_trajectory_computed_ = false;
+  std::chrono::steady_clock::time_point trajectory_start_time_{};
+  bool human_interaction_detected = false;
+  int interaction_detection_counter_limit = 100;
+  int loss_of_interaction_detection_counter_limit = 3000;
+  int interaction_counter = 0;
 
   bool in_comm_with_hw;
   e_states fsm_execution_state;

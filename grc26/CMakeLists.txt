@@ -60,6 +60,7 @@ add_executable(kinova_single_arm_demo
                 src/fsm_utils.cpp
                 src/kinova_single_arm_demo.cpp
                 src/pid_controller.cpp
+                src/trajectory.cpp
                 src/task_status_node.cpp
                 )
 

@@ -2,6 +2,9 @@
 
 #include <cmath>
 
+
+
+
 void FSMInterface::reset_ft_force_estimator()
 {
   ft_reference_ready_ = false;
@@ -58,9 +61,10 @@ void FSMInterface::transform_ft_readings_to_BL_update_state(SystemState& system_
 }
 
 bool FSMInterface::update_ft_force_estimate(const SystemState& system_state,
-                                            std::array<double, 6>& corrected_force_mean)
+                                            std::array<double, 6>& corrected_ft_wrt_init_ref,
+                                            std::array<double,6>& corrected_ft_wrt_prev_ref)
 {
-  corrected_force_mean.fill(0.0);
+  corrected_ft_wrt_init_ref.fill(0.0);
 
   if (!system_state.ft_sensor.present) {
     return false;
@@ -122,8 +126,9 @@ bool FSMInterface::update_ft_force_estimate(const SystemState& system_state,
   }
 
   for (int axis = 0; axis < 6; ++axis) {
-    const double rolling_mean = ft_window_sum_[axis] / static_cast<double>(FT_WINDOW_SIZE);
-    corrected_force_mean[axis] = rolling_mean - ft_reference_mean_[axis];
+    const double rolling_mean_value = ft_window_sum_[axis] / static_cast<double>(FT_WINDOW_SIZE);
+    corrected_ft_wrt_init_ref[axis] = rolling_mean_value - ft_reference_mean_[axis];
+    corrected_ft_wrt_prev_ref[axis] = rolling_mean_value - system_state.ft_sensor.wrench_BL[axis]; 
   }
 
   return true;
@@ -136,6 +141,52 @@ void FSMInterface::normalize_angle_diff(double& angle_diff)
   }
   else if (angle_diff < -M_PI) {
     angle_diff += 2 * M_PI;
+  }
+}
+
+
+void FSMInterface::compute_trajectory()
+{
+  constexpr double trajectory_max_vel = 0.05; // m/s
+  constexpr double trajectory_max_acc = 0.10; // m/s^2
+  trajectory_object_ = std::make_unique<TrajectoryGenerator>(
+    arm_kinematics_->pose(),
+    final_ee_pose_,
+    trajectory_max_vel,
+    trajectory_max_acc);
+  trajectory_ = &trajectory_object_->get();
+  trajectory_start_time_ = std::chrono::steady_clock::now();
+}
+
+void FSMInterface::human_interaction_monitoring(double corrected_external_force_magnitude)
+{
+  if (human_interaction_detected) 
+  {
+    if (corrected_external_force_magnitude <= task_spec.collaborate_spec.external_force_deadband)
+    {
+      interaction_counter += 1;
+    }
+    else
+    {
+      interaction_counter = 0;
+    }
+    if (interaction_counter >= interaction_detection_counter_limit) {
+      human_interaction_detected = false;
+      interaction_counter = 0;
+    }
+  }
+  else {
+    if (corrected_external_force_magnitude > task_spec.collaborate_spec.external_force_deadband)
+    {
+      interaction_counter += 1;
+    }
+    else {
+      interaction_counter = 0;
+    }
+    if (interaction_counter >= loss_of_interaction_detection_counter_limit) {
+      human_interaction_detected = true;
+      interaction_counter = 0;
+    }
   }
 }
 
@@ -241,8 +292,8 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
   {
     printf("Post condition met\n");
     if (fsm_execution_state == S_M_TOUCH_TABLE){
-      produce_event(eventData, E_ENTER_IDLE);
-      // produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
+      // produce_event(eventData, E_ENTER_IDLE);
+      produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
       printf("Completed touch table behavior\n");
     }
     else if (fsm_execution_state == S_M_SLIDE_ALONG_TABLE){
@@ -251,7 +302,8 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
           produce_event(eventData, E_M_GRASP_OBJECT_CONFIG);
         }
       else {
-        produce_event(eventData, E_ENTER_IDLE);
+        // produce_event(eventData, E_ENTER_IDLE);
+        produce_event(eventData, E_M_COLLABORATE_CONFIG);
       }
     }
     else if (fsm_execution_state == S_M_GRASP_OBJECT){
