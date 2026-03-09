@@ -897,13 +897,7 @@ def execute_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
         case Motions.RELEASE:
             ud.current_motion = Motions.RETRACT
             
-            evt_msg = Event()
-            evt_msg.stamp = node.get_clock().now().to_msg()
-            evt_msg.scenario_context_id = node.bhv_ctx_id
-            evt_msg.uri = EXPORTED_EVENTS['PLACE_END']
-            node.evt_pub.publish(evt_msg)
-            node.logger.info('published place end event')
-            node.bhv_goal_in = False
+           
 
             print(f"Motion '{Motions.RELEASE.name}' completed, transitioning to '{Motions.RETRACT.name}'")
             produce_event(fsm.event_data, EventID.E_M_RETRACT_ARM_CONFIG)
@@ -914,6 +908,14 @@ def execute_step(fsm: FSMData, ud: UserData, node: DualArmPickPlace):
         case Motions.RETURN_HOME:
             ud.current_motion = Motions.NONE
             print(f"Motion '{Motions.RETURN_HOME.name}' completed, all motions done")
+            
+            evt_msg = Event()
+            evt_msg.stamp = node.get_clock().now().to_msg()
+            evt_msg.scenario_context_id = node.bhv_ctx_id
+            evt_msg.uri = EXPORTED_EVENTS['PLACE_END']
+            node.evt_pub.publish(evt_msg)
+            node.logger.info('published place end event')
+            node.bhv_goal_in = False
             
             # pub bhv
             is_placed = node.is_placed()
