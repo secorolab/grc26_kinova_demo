@@ -197,6 +197,14 @@ int main(int argc, char ** argv)
       }
     }
 
+    TaskStatusData latest_status;
+    task_status->getLatest(latest_status);
+
+    // Sync action-server-owned fields into the FSM-visible status
+    status.goal_in = latest_status.goal_in;
+    status.bhv_ctx_id = latest_status.bhv_ctx_id;
+    status.task_completed = latest_status.task_completed;
+
     fsm_interface->run_fsm();
 
     DebugSample debug_sample;
@@ -206,7 +214,15 @@ int main(int argc, char ** argv)
       debug_buffer->push(debug_sample);
     }
 
-    task_status->update(status);
+    TaskStatusData latest_status_after_fsm;
+    task_status->getLatest(latest_status_after_fsm);
+
+    TaskStatusData merged_status = status;
+    merged_status.goal_in = latest_status_after_fsm.goal_in;
+    merged_status.bhv_ctx_id = latest_status_after_fsm.bhv_ctx_id;
+    merged_status.task_completed = status.task_completed || latest_status_after_fsm.task_completed;
+
+    task_status->update(merged_status);
 
     if (fsm_interface->get_current_state() == S_EXIT) {
       LOG_INFO(node, "FSM reached exit state, breaking control loop");

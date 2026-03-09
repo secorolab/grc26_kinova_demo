@@ -34,6 +34,10 @@ rclcpp_action::GoalResponse ActionServerNode::handle_goal(
         RCLCPP_WARN(this->get_logger(), "Received new goal while another is still active. Rejecting.");
         return rclcpp_action::GoalResponse::REJECT;
     }
+
+    current_status.goal_in = true;
+    task_status_->update(current_status);
+
     RCLCPP_INFO(this->get_logger(), "Behavior execution started");
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
@@ -67,6 +71,7 @@ void ActionServerNode::execute(
     task_status_->getLatest(current_status);
     const auto goal = goal_handle->get_goal();
     current_status.bhv_ctx_id = goal->scenario_context_id;
+    current_status.goal_in = true;
     current_status.task_completed = false;
     task_status_->update(current_status);
 
@@ -77,22 +82,29 @@ void ActionServerNode::execute(
     feedback->scenario_context_id = current_status.bhv_ctx_id;
 
     rclcpp::WallRate rate(100.0);
-    task_status_->getLatest(current_status);
-    while (rclcpp::ok() && !current_status.task_completed)
+    while (rclcpp::ok())
     {
+        task_status_->getLatest(current_status);
+        if (current_status.task_completed) {
+            break;
+        }
+
         if (goal_handle->is_canceling()) {
+            current_status.goal_in = false;
+            task_status_->update(current_status);
             goal_handle->canceled(response);
             RCLCPP_INFO(this->get_logger(), "Behavior execution cancel requested");
             return;
         }
-
         rate.sleep();
     }
-    
+
     response->result.stamp = this->now();
     task_status_->getLatest(current_status);
     response->result.trinary.value = current_status.task_completed ? bdd_ros2_interfaces::msg::Trinary::TRUE : bdd_ros2_interfaces::msg::Trinary::FALSE;
 
     goal_handle->succeed(response);
+    current_status.goal_in = false;
+    task_status_->update(current_status);
     RCLCPP_INFO(this->get_logger(), "Behavior execution succeeded");
 }

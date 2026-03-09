@@ -133,17 +133,6 @@ void FSMInterface::configure(events *eventData, SystemState& system_state){
 
 void FSMInterface::idle(events *eventData, SystemState& system_state){
 
-  // TODO: this is to test any behavior. Modify events returned in post_condition; an event to start will be triggered by action server
-  task_triggered = false;
-  task_status.goal_in = true;
-  if (!task_triggered && task_status.goal_in) 
-  {
-    task_triggered = true;
-    // produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
-    produce_event(eventData, E_M_COLLABORATE_CONFIG);
-  }
-
-  // TODO: update task_status accordingly throughout the behaviors
   fsm_execution_state = S_IDLE;
 
   robif2b_kinova_gen3_update(&rob);
@@ -216,7 +205,15 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
 
 void FSMInterface::execute(events *eventData, SystemState& system_state){
 
-  printf("\n\n");
+  // printf("In idle state. Waiting for task to be triggered...\n");
+  // printf("task_status.goal_in: %d\n", task_status.goal_in);
+  if (!task_triggered && task_status.goal_in) 
+  {
+    task_triggered = true;
+    produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
+    // produce_event(eventData, E_M_COLLABORATE_CONFIG);
+  }
+  // printf("\n\n");
   if (false) printf("[EE pose]: [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->pose().p.x(), arm_kinematics_->pose().p.y(), arm_kinematics_->pose().p.z());
   
   std::array<double, 6> corrected_ft_wrt_init_ref{}; // get deviation of current value from initial reference window (when ft estimator is reset)
@@ -254,7 +251,7 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
         ft_readings_deviation[2] * ft_readings_deviation[2]);
 
       human_interaction_monitoring(corrected_external_force_magnitude);
-      human_interaction_detected = true;
+      // human_interaction_detected = true;
 
       if (human_interaction_detected){
         // if human interation is detected, switch to collaboration gains 
@@ -462,7 +459,7 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
       double position_error = task_spec.joint_position.position[i] - system_state.arm.q[i];
       normalize_angle_diff(position_error);
       if (false) printf("Joint %d position error: %6.2f\n", i, position_error);
-      system_state.arm.tau_cmd[i] = 70.0 * position_error;
+      system_state.arm.tau_cmd[i] = 400.0 * position_error;
     }
   }
   else {
@@ -572,7 +569,7 @@ void FSMInterface::slide_on_table_behavior_config(events *eventData, SystemState
   task_spec.ee_linear.mode[0] = LinearMode::Velocity;
   task_spec.ee_linear.mode[1] = LinearMode::Velocity;
   task_spec.ee_linear.mode[2] = LinearMode::Force;
-  task_spec.ee_linear.velocity[0] = 0.02;     // m/s
+  task_spec.ee_linear.velocity[0] = 0.04;     // m/s
   task_spec.ee_linear.velocity[1] = 0.0;      // m/s
   task_spec.ee_linear.force[2]    = -5.0;     // N
 
@@ -590,7 +587,7 @@ void FSMInterface::slide_on_table_behavior_config(events *eventData, SystemState
   task_spec.post_condition.constraints[0].type = ConstraintType::Position;
   task_spec.post_condition.constraints[0].axis = 0; // x-axis
   task_spec.post_condition.constraints[0].op = CompareOp::GreaterEqual;
-  task_spec.post_condition.constraints[0].value = 0.6; // m
+  task_spec.post_condition.constraints[0].value = 0.65; // m
 
   // task_spec.post_condition.constraints[1].type = ConstraintType::Position;
   // task_spec.post_condition.constraints[1].axis = 2; // z-axis
@@ -681,8 +678,8 @@ void FSMInterface::collaborate_behavior_config(events *eventData, SystemState& s
 
   task_spec.follow_trajectory = true;
   task_spec.collaborate_spec.enabled = true; // current logic: if enabled, start traj following, then on human intervention, switch to collaboration
-  task_spec.collaborate_spec.magnification_factor = 5.0;     // scale
-  task_spec.collaborate_spec.external_force_deadband  = 3.0; // N
+  task_spec.collaborate_spec.magnification_factor = 25.0;     // scale
+  task_spec.collaborate_spec.external_force_deadband  = 0.15; // N
   task_spec.collaborate_spec.f_ext_saturation_limit = 10.0;  // N
 
   task_spec.post_condition.available = true;

@@ -149,7 +149,7 @@ void FSMInterface::normalize_angle_diff(double& angle_diff)
 
 void FSMInterface::compute_trajectory()
 {
-  constexpr double trajectory_max_vel = 0.05; // m/s
+  constexpr double trajectory_max_vel = 0.07; // m/s
   constexpr double trajectory_max_acc = 0.10; // m/s^2
   trajectory_object_ = std::make_unique<TrajectoryGenerator>(
     arm_kinematics_->pose(),
@@ -162,6 +162,7 @@ void FSMInterface::compute_trajectory()
 
 void FSMInterface::human_interaction_monitoring(double corrected_external_force_magnitude)
 {
+  printf("[Corrected external] force magnitude: %6.2f N\n", corrected_external_force_magnitude);
   if (human_interaction_detected) 
   {
     if (corrected_external_force_magnitude <= task_spec.collaborate_spec.external_force_deadband)

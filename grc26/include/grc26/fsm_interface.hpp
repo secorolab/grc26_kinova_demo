@@ -136,7 +136,7 @@ private:
   std::unique_ptr<VereshchaginSolver> solver_;
   std::unique_ptr<ArmKinematics> arm_kinematics_;
 
-  static constexpr std::size_t FT_WINDOW_SIZE = 500;
+  static constexpr std::size_t FT_WINDOW_SIZE = 100;
   bool ft_reference_ready_ = false;
   std::size_t ft_reference_count_ = 0;
   std::array<double, 6> ft_reference_sum_{};
