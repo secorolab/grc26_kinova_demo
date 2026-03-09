@@ -132,10 +132,11 @@ int main(int argc, char ** argv)
   auto task_status = std::make_shared<TaskStatus>();
   auto debug_buffer = std::make_shared<DebugSignalBuffer>(4000);
   auto fsm_interface = std::make_shared<FSMInterface>(system_state, arm, gripper, ft_sensor, status);
+  auto bhv_state = std::make_shared<BehaviourState>();
 
   auto node = std::make_shared<TaskStatusROSNode>(task_status);
   auto debug_node = std::make_shared<DebugStateROSNode>(debug_buffer);
-  auto action_server_node = std::make_shared<ActionServerNode>();
+  auto action_server_node = std::make_shared<ActionServerNode>(bhv_state);
 
   rclcpp::executors::MultiThreadedExecutor executor(
       rclcpp::ExecutorOptions(), 2);
