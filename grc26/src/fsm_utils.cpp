@@ -292,12 +292,20 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
   {
     printf("Post condition met\n");
     if (fsm_execution_state == S_M_TOUCH_TABLE){
+      task_status.is_obj_located_at_pick_location = false;
+      task_status.is_obj_located_at_place_location = false;
+      task_status.is_obj_held_by_robot = false;
+      task_status.task_completed = false;
       // produce_event(eventData, E_ENTER_IDLE);
       produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
       printf("Completed touch table behavior\n");
     }
     else if (fsm_execution_state == S_M_SLIDE_ALONG_TABLE){
       printf("Completed slide along table behavior\n");
+      task_status.is_obj_located_at_pick_location = true;
+      task_status.is_obj_located_at_place_location = false;
+      task_status.is_obj_held_by_robot = false;
+      task_status.task_completed = false;
       if (system_state.gripper.present) {
           produce_event(eventData, E_M_GRASP_OBJECT_CONFIG);
         }
@@ -307,12 +315,20 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
       }
     }
     else if (fsm_execution_state == S_M_GRASP_OBJECT){
+      task_status.is_obj_located_at_pick_location = true;
+      task_status.is_obj_located_at_place_location = false;
+      task_status.is_obj_held_by_robot = true;
+      task_status.task_completed = false;
       printf("Completed grasp object behavior\n");
       if (system_state.gripper.present) {
         produce_event(eventData, E_ENTER_IDLE);
       }
     }
     else if (fsm_execution_state == S_M_COLLABORATE){
+      task_status.is_obj_located_at_pick_location = false;
+      task_status.is_obj_located_at_place_location = false;
+      task_status.is_obj_held_by_robot = true;
+      task_status.task_completed = false;
       printf("Completed collaborate behavior\n");
       if (system_state.gripper.present) {
           produce_event(eventData, E_M_RELEASE_OBJECT_CONFIG);
@@ -323,6 +339,10 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
     }
     else if (fsm_execution_state == S_M_RELEASE_OBJECT){
       printf("Completed release object behavior\n");
+      task_status.is_obj_held_by_robot = false;
+      task_status.is_obj_located_at_pick_location = false;
+      task_status.is_obj_located_at_place_location = true;
+      task_status.task_completed = true;
       produce_event(eventData, E_ENTER_IDLE);
     }
   }

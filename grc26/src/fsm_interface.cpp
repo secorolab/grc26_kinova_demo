@@ -135,7 +135,7 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
 
   // TODO: this is to test any behavior. Modify events returned in post_condition; an event to start will be triggered by action server
   task_triggered = false;
-  if (!task_triggered) 
+  if (!task_triggered && task_status.goal_in) 
   {
     task_triggered = true;
     produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);

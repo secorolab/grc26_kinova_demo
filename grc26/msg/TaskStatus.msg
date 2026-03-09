@@ -1,4 +1,5 @@
-bool idle
-bool human_initiation
-bool task_completion
-bool obj_held_by_human
+bool goal_in
+bool task_completed
+bool is_obj_located_at_pick_location
+bool is_obj_held_by_robot
+bool is_obj_located_at_place_location
