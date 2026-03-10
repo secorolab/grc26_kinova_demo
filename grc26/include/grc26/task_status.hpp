@@ -15,6 +15,10 @@ struct TaskStatusData
     bool is_obj_located_at_pick_location = false;
     bool is_obj_held_by_robot = false;
     bool is_obj_located_at_place_location = false;
+    bool is_pick_start = false;
+    bool is_pick_end = false;
+    bool is_place_start = false;
+    bool is_place_end = false;
 
     uint64_t sequence_number = 0;
     std::chrono::high_resolution_clock::time_point timestamp;
@@ -37,6 +41,17 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
         out = current_;
+        return true;
+    }
+    
+    bool consumeLatest(TaskStatusData& out)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        out = current_;
+        current_.is_pick_start = false;
+        current_.is_pick_end = false;
+        current_.is_place_start = false;
+        current_.is_place_end = false;
         return true;
     }
 

@@ -4,3 +4,7 @@ bool task_completed
 bool is_obj_located_at_pick_location
 bool is_obj_held_by_robot
 bool is_obj_located_at_place_location
+bool is_pick_start
+bool is_pick_end
+bool is_place_start
+bool is_place_end

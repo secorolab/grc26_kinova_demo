@@ -299,6 +299,7 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
       task_status.is_obj_located_at_place_location = false;
       task_status.is_obj_held_by_robot = false;
       task_status.task_completed = false;
+      task_status.is_pick_start = true;
       // produce_event(eventData, E_ENTER_IDLE);
       produce_event(eventData, E_M_SLIDE_ALONG_TABLE_CONFIG);
       printf("Completed touch table behavior\n");
@@ -322,6 +323,8 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
       task_status.is_obj_located_at_place_location = false;
       task_status.is_obj_held_by_robot = true;
       task_status.task_completed = false;
+      task_status.is_pick_end = true;
+      task_status.is_place_start = true;
       printf("Completed grasp object behavior\n");
       if (system_state.gripper.present) {
         produce_event(eventData, E_ENTER_IDLE);
@@ -346,6 +349,7 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
       task_status.is_obj_located_at_pick_location = false;
       task_status.is_obj_located_at_place_location = true;
       task_status.task_completed = true;
+      task_status.is_place_end = true;
       produce_event(eventData, E_ENTER_IDLE);
     }
   }

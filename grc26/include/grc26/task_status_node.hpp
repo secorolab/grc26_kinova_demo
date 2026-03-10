@@ -8,6 +8,7 @@
 
 #include "grc26/task_status.hpp"
 
+#include "bdd_ros2_interfaces/msg/event.hpp"
 #include "bdd_ros2_interfaces/msg/trinary_stamped.hpp"
 
 class TaskStatusROSNode : public rclcpp::Node
@@ -20,6 +21,8 @@ private:
     void publishStatus(const TaskStatusData& status);
 
     std::shared_ptr<TaskStatus> task_status_;
+
+    rclcpp::Publisher<bdd_ros2_interfaces::msg::Event>::SharedPtr event_pub_;
 
     rclcpp::Publisher<bdd_ros2_interfaces::msg::TrinaryStamped>::SharedPtr located_pick_pub_;
     rclcpp::Publisher<bdd_ros2_interfaces::msg::TrinaryStamped>::SharedPtr is_held_pub_;
