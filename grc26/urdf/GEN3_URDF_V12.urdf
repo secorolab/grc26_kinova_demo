@@ -226,8 +226,8 @@
   </joint>
   <link name="EndEffector_Link">
     <inertial>
-      <origin xyz="0 0 0.025" rpy="0 0 0"/>
-      <mass value="0.595"/>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <mass value="1.195"/>
       <inertia ixx="0.000814" ixy="0" ixz="0" iyy="0.000814" iyz="0" izz="0.00144"/>
     </inertial>
   </link>
