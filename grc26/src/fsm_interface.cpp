@@ -1,15 +1,14 @@
 #include "grc26/fsm_interface.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 FSMInterface::FSMInterface(SystemState& system_state,
-                           robif2b_kinova_gen3_nbx& rob, 
-                           robif2b_kg3_robotiq_gripper_nbx& gripper,
+                           robif2b_kinova_gen3_nbx& rob,
                            robif2b_robotiq_ft_nbx& ft_sensor,
                            TaskStatusData& status)
   : system_state(system_state),
     rob(rob),
-    gripper(gripper),
     ft_sensor(ft_sensor),
     task_status(status),
     compute_ctr_cmd_obj(ctr_config_idle.controllers()),
@@ -118,12 +117,7 @@ void FSMInterface::configure(events *eventData, SystemState& system_state){
   }
 
   if (system_state.gripper.present) {
-    robif2b_kg3_robotiq_gripper_start(&gripper);
-    if (!gripper.success) {
-        printf("Error during gripper start\n");
-        robif2b_kg3_robotiq_gripper_stop(&gripper);
-        printf("Stopped gripper\n");
-    }
+    system_state.gripper.to_control_gripper = false;
   }
 
   in_comm_with_hw = true;
@@ -200,12 +194,14 @@ void FSMInterface::idle(events *eventData, SystemState& system_state){
 
 void FSMInterface::execute(events *eventData, SystemState& system_state){
 
-  task_status.goal_in = true; // TODO: comment this line. Used for testing
+  // task_status.goal_in = true; // TODO: comment this line. Used for testing
   if (!task_triggered && task_status.goal_in) 
   {
     task_triggered = true;
     produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
-    // produce_event(eventData, E_M_COLLABORATE_CONFIG);
+    // produce_event(eventData, E_M_TOUCH_TABLE_CONFIG);
+    // produce_event(eventData, E_M_GRASP_OBJECT_CONFIG);
+    // produce_event(eventData, E_M_RELEASE_OBJECT_CONFIG);
   }
   // printf("\n\n");
   if (false) printf("[EE pose]: [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->pose().p.x(), arm_kinematics_->pose().p.y(), arm_kinematics_->pose().p.z());
@@ -268,10 +264,10 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
         task_spec.ee_linear.enabled = true;
         task_spec.ee_linear.mode[0] = LinearMode::Velocity;
         task_spec.ee_linear.mode[1] = LinearMode::Velocity;
-        task_spec.ee_linear.mode[2] = LinearMode::Velocity;
+        task_spec.ee_linear.mode[2] = LinearMode::Force;
         task_spec.ee_linear.velocity[0] = 0.0; // m/s
         task_spec.ee_linear.velocity[1] = 0.0; // m/s
-        task_spec.ee_linear.velocity[2] = 0.0; // m/s
+        task_spec.ee_linear.force[2] = weight_of_tray; // N, compensate for weight of tray
         
         task_spec.orientation.enabled = true;
         task_spec.orientation.mode = OrientationMode::Position;
@@ -401,17 +397,17 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
     latest_debug_sample_ = debug_sample;
     debug_sample_valid_ = true;
 
-    printf("[EE Velocity] : [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->twist().vel.x(), arm_kinematics_->twist().vel.y(), arm_kinematics_->twist().vel.z());
-    printf("[EE pose] : [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->pose().p.x(), arm_kinematics_->pose().p.y(), arm_kinematics_->pose().p.z());
-    printf("[EE orientation RPY] : [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->rpy()[0], arm_kinematics_->rpy()[1], arm_kinematics_->rpy()[2]);
-    printf("[Beta command] : [%6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f]\n", solver_->beta()(0), solver_->beta()(1), solver_->beta()(2), solver_->beta()(3), solver_->beta()(4), solver_->beta()(5));
-    printf("[External wrench command @ EE] : fx=%6.2f, fy=%6.2f, fz=%6.2f, tx=%6.2f, ty=%6.2f, tz=%6.2f\n",
-            solver_->externalWrenches().back()(0),
-            solver_->externalWrenches().back()(1),
-            solver_->externalWrenches().back()(2),
-            solver_->externalWrenches().back()(3),
-            solver_->externalWrenches().back()(4),
-            solver_->externalWrenches().back()(5));
+    // printf("[EE Velocity] : [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->twist().vel.x(), arm_kinematics_->twist().vel.y(), arm_kinematics_->twist().vel.z());
+    // printf("[EE pose] : [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->pose().p.x(), arm_kinematics_->pose().p.y(), arm_kinematics_->pose().p.z());
+    // printf("[EE orientation RPY] : [%6.2f, %6.2f, %6.2f]\n", arm_kinematics_->rpy()[0], arm_kinematics_->rpy()[1], arm_kinematics_->rpy()[2]);
+    // printf("[Beta command] : [%6.2f, %6.2f, %6.2f, %6.2f, %6.2f, %6.2f]\n", solver_->beta()(0), solver_->beta()(1), solver_->beta()(2), solver_->beta()(3), solver_->beta()(4), solver_->beta()(5));
+    // printf("[External wrench command @ EE] : fx=%6.2f, fy=%6.2f, fz=%6.2f, tx=%6.2f, ty=%6.2f, tz=%6.2f\n",
+    //         solver_->externalWrenches().back()(0),
+    //         solver_->externalWrenches().back()(1),
+    //         solver_->externalWrenches().back()(2),
+    //         solver_->externalWrenches().back()(3),
+    //         solver_->externalWrenches().back()(4),
+    //         solver_->externalWrenches().back()(5));
 
     // computeTorques adds torques from vn_fixed_joint and vn_fext solvers
 
@@ -499,8 +495,20 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
   {
     if (system_state.gripper.present)
     {
-      system_state.gripper.pos_cmd[0] = task_spec.gripper.position;
-      robif2b_kg3_robotiq_gripper_update(&gripper);
+      if (system_state.gripper.to_control_gripper &&
+          system_state.gripper.gripper_control_completed) 
+      {
+        system_state.gripper.to_control_gripper = false;
+      }
+      else if (!system_state.gripper.to_control_gripper
+              && !system_state.gripper.gripper_control_completed) {
+        system_state.gripper.pos_cmd[0] = task_spec.gripper.position;
+        system_state.gripper.to_control_gripper = true;
+      }
+      else {
+        printf("[Gripper] system_state.gripper.to_control_gripper = %d, system_state.gripper.gripper_control_completed = %d\n", 
+                system_state.gripper.to_control_gripper, system_state.gripper.gripper_control_completed);
+      }
     }
     else
     {
@@ -511,7 +519,7 @@ void FSMInterface::execute(events *eventData, SystemState& system_state){
   // FT sensor is updated in a separate 100 Hz thread. Using cached state
   if (false && system_state.ft_sensor.present)
   {
-    printf("FT sensor readings: fx=%6.2f, fy=%6.2f, fz=%6.2f, tx=%6.2f, ty=%6.2f, tz=%6.2f\n", 
+    printf("FT sensor readings: fx=%6.2f, fy=%6.2f, fz=%6.2fLessEqual, tx=%6.2f, ty=%6.2f, tz=%6.2f\n", 
       system_state.ft_sensor.fx_BL, system_state.ft_sensor.fy_BL, system_state.ft_sensor.fz_BL, 
       system_state.ft_sensor.tx_BL, system_state.ft_sensor.ty_BL, system_state.ft_sensor.tz_BL);
   }
@@ -628,7 +636,7 @@ void FSMInterface::grasp_object_behavior_config(events *eventData, SystemState& 
   task_spec.orientation.rpy[2] = -M_PI / 2;
 
   task_spec.gripper.enabled = true;
-  task_spec.gripper.position = 95.0; // fully closed
+  task_spec.gripper.position = 85; // fully closed
 
   task_spec.post_condition.available = true;
   task_spec.post_condition.num_constraints = 1;
@@ -636,7 +644,7 @@ void FSMInterface::grasp_object_behavior_config(events *eventData, SystemState& 
   task_spec.post_condition.constraints[0].type = ConstraintType::Position;
   task_spec.post_condition.constraints[0].axis = 3; // gripper axis
   task_spec.post_condition.constraints[0].op = CompareOp::GreaterEqual;
-  task_spec.post_condition.constraints[0].value = 95.0; // fully closed
+  task_spec.post_condition.constraints[0].value = 80; // fully closed
 
   produce_event(eventData, E_M_GRASP_OBJECT_CONFIGURED);
 }
@@ -724,7 +732,7 @@ void FSMInterface::release_object_behavior_config(events *eventData, SystemState
   task_spec.orientation.rpy[2] = -M_PI / 2;
 
   task_spec.gripper.enabled = true;
-  task_spec.gripper.position = 0.0; // fully open
+  task_spec.gripper.position = 10.0; // fully open
 
   task_spec.post_condition.available = true;
   task_spec.post_condition.num_constraints = 1;
@@ -732,7 +740,7 @@ void FSMInterface::release_object_behavior_config(events *eventData, SystemState
   task_spec.post_condition.constraints[0].type = ConstraintType::Position;
   task_spec.post_condition.constraints[0].axis = 3;     // gripper axis
   task_spec.post_condition.constraints[0].op = CompareOp::LessEqual;
-  task_spec.post_condition.constraints[0].value = 95.0;  // fully closed
+  task_spec.post_condition.constraints[0].value = 20.0;  // fully closed
 
   produce_event(eventData, E_M_RELEASE_OBJECT_CONFIGURED);
 }
@@ -749,7 +757,8 @@ void FSMInterface::exit(events *eventData, SystemState& system_state){
     }
     if (system_state.gripper.present) {
       std::cout << "Stopping gripper..." << std::endl;
-      robif2b_kg3_robotiq_gripper_stop(&gripper);
+      system_state.gripper.to_control_gripper = false;
+      system_state.gripper.gripper_control_completed = false;
     }
     std::cout << "Shutting down arm..." << std::endl;
     robif2b_kinova_gen3_stop(&rob);

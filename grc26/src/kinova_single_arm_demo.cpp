@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <atomic>
 #include <csignal>
 #include <chrono>
@@ -21,6 +22,8 @@
 #include "grc26/hardware_binding.hpp"
 #include "robif2b/functions/kinova_gen3.h"
 #include "robif2b/functions/robotiq_ft_sensor.h"
+#include <robotiq_driver/default_driver.hpp>
+#include <robotiq_driver/default_serial.hpp>
 #include "grc26/kinova_single_arm_demo.fsm.hpp"
 
 #define LOG_INFO(node, msg, ...) RCLCPP_INFO(node->get_logger(), msg, ##__VA_ARGS__)
@@ -30,6 +33,21 @@
 #define LOG_ERROR_S(node, expr) RCLCPP_ERROR_STREAM((node)->get_logger(), expr)
 
 std::atomic_bool shutting_down{false};
+
+namespace
+{
+uint8_t gripperPercentToRegister(float percent)
+{
+  const float clamped_percent = std::max(0.0f, std::min(percent, 100.0f));
+  const float register_value = (clamped_percent / 100.0f) * 255.0f;
+  return static_cast<uint8_t>(std::round(register_value));
+}
+
+float gripperRegisterToPercent(uint8_t reg)
+{
+  return (static_cast<float>(reg) / 255.0f) * 100.0f;
+}
+}
 
 void signal_handler(int /*signum*/) 
 {
@@ -46,7 +64,7 @@ int main(int argc, char ** argv)
   // --------------------- robot communication setup ---------------------
 
   SystemState system_state;
-  system_state.gripper.present = false;
+  system_state.gripper.present = true;
   system_state.arm.present = true;
   system_state.ft_sensor.present = true;
 
@@ -64,11 +82,8 @@ int main(int argc, char ** argv)
 
   bindKinovaArm(arm, system_state);
 
-  robif2b_kg3_robotiq_gripper_nbx gripper;
-  bindRobotiqGripper(gripper, system_state);
-
   robif2b_robotiq_ft_nbx ft_sensor;
-  ft_sensor.conf.device = "/dev/ttyUSB0";
+  ft_sensor.conf.device = "/dev/ttyUSB1";
   ft_sensor.conf.baudrate = 19200;
   FTIOBuffer ft_io_buffer;
   ft_sensor.force_x = &ft_io_buffer.fx;
@@ -123,6 +138,98 @@ int main(int argc, char ** argv)
     }
   });
 
+/*
+Gripper control logic:
+- Set to_control in system state from fsm_interface
+- Gripper thread updates measured position, is_moving, and if control is completed
+*/
+
+  std::atomic_bool gripper_reader_stop{false};
+  std::atomic_bool gripper_hw_active{false};
+  GripperIOBuffer gripper_io;
+
+  std::thread gripper_reader_thread([&]() {
+    constexpr auto gripper_period = std::chrono::milliseconds(20); // 50 Hz
+    auto next_gripper_cycle = std::chrono::steady_clock::now() + gripper_period;
+
+    std::unique_ptr<robotiq_driver::DefaultDriver> gripper_driver;
+    bool command_sent = false;
+
+    while (!gripper_reader_stop.load() && !shutting_down.load()) {
+      if (gripper_hw_active.load(std::memory_order_relaxed) && system_state.gripper.present) {
+        if (!gripper_driver) {
+          try {
+            auto serial = std::make_unique<robotiq_driver::DefaultSerial>();
+            serial->set_port(system_state.gripper.kComPort);
+            serial->set_baudrate(system_state.gripper.kBaudRate);
+            serial->set_timeout(std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::duration<double>(system_state.gripper.kTimeout)));
+
+            auto driver = std::make_unique<robotiq_driver::DefaultDriver>(std::move(serial));
+            driver->set_slave_address(static_cast<uint8_t>(system_state.gripper.kSlaveAddress));
+
+            if (driver->connect()) {
+              driver->deactivate();
+              driver->activate();
+              driver->set_speed(0xFF);
+              driver->set_force(0xFF);
+              gripper_driver = std::move(driver);
+            } else {
+              printf("Failed to connect to gripper driver\n");
+            }
+          } catch (const std::exception&) {
+            gripper_driver.reset();
+          }
+        }
+
+        if (gripper_driver) {
+          try {
+            const bool to_control = gripper_io.to_control_gripper.load(std::memory_order_relaxed);
+            if (to_control) {
+              if (!command_sent) {
+                const float cmd = gripper_io.pos_cmd.load(std::memory_order_relaxed);
+                gripper_driver->set_gripper_position(gripperPercentToRegister(cmd));
+                command_sent = true;
+                gripper_io.gripper_control_completed.store(false, std::memory_order_relaxed);
+              }
+
+              const bool moving = gripper_driver->gripper_is_moving();
+              const uint8_t pos_register = gripper_driver->get_gripper_position();
+
+              gripper_io.pos_msr.store(gripperRegisterToPercent(pos_register), std::memory_order_relaxed);
+              gripper_io.vel_msr.store(moving ? 1.0f : 0.0f, std::memory_order_relaxed);
+              gripper_io.cur_msr.store(0.0f, std::memory_order_relaxed);
+
+              if (!moving) {
+                gripper_io.gripper_control_completed.store(true, std::memory_order_relaxed);
+                command_sent = false;
+              }
+            } else {
+              command_sent = false;
+              gripper_io.gripper_control_completed.store(false, std::memory_order_relaxed);
+            }
+          } catch (const std::exception&) {
+            printf("Error occurred while updating gripper state\n");
+            gripper_io.gripper_control_completed.store(false, std::memory_order_relaxed);
+            gripper_driver.reset();
+            command_sent = false;
+          }
+        }
+      }
+
+      std::this_thread::sleep_until(next_gripper_cycle);
+      next_gripper_cycle += gripper_period;
+      const auto now = std::chrono::steady_clock::now();
+      if (next_gripper_cycle <= now) {
+        next_gripper_cycle = now + gripper_period;
+      }
+    }
+
+    if (gripper_driver) {
+      gripper_driver->disconnect();
+    }
+  });
+
   // --------------------- ROS related ---------------------
 
   rclcpp::InitOptions init_options;
@@ -131,7 +238,7 @@ int main(int argc, char ** argv)
 
   auto task_status = std::make_shared<TaskStatus>();
   auto debug_buffer = std::make_shared<DebugSignalBuffer>(4000);
-  auto fsm_interface = std::make_shared<FSMInterface>(system_state, arm, gripper, ft_sensor, status);
+  auto fsm_interface = std::make_shared<FSMInterface>(system_state, arm, ft_sensor, status);
   auto bhv_state = std::make_shared<BehaviourState>();
 
   auto node = std::make_shared<TaskStatusROSNode>(task_status);
@@ -164,6 +271,14 @@ int main(int argc, char ** argv)
 
   while (!shutting_down.load()){
     ft_hw_active.store(fsm_interface->is_in_comm_with_hw(), std::memory_order_relaxed);
+    gripper_hw_active.store(fsm_interface->is_in_comm_with_hw(), std::memory_order_relaxed);
+
+    if (system_state.gripper.present) {
+      system_state.gripper.pos_msr[0] = gripper_io.pos_msr.load(std::memory_order_relaxed);
+      system_state.gripper.vel_msr[0] = gripper_io.vel_msr.load(std::memory_order_relaxed);
+      system_state.gripper.cur_msr[0] = gripper_io.cur_msr.load(std::memory_order_relaxed);
+      system_state.gripper.gripper_control_completed = gripper_io.gripper_control_completed.load(std::memory_order_relaxed);
+    }
 
     if (system_state.ft_sensor.present) {
       std::lock_guard<std::mutex> lock(ft_snapshot_mutex);
@@ -181,7 +296,7 @@ int main(int argc, char ** argv)
           system_state.ft_sensor.wrench[i] = ft_snapshot.wrench[i];
         }
         system_state.ft_sensor.new_data = ft_snapshot.new_data;
-        system_state.ft_sensor.success = ft_snapshot.success;
+        system_state.ft_sensor.success  = ft_snapshot.success;
         system_state.ft_sensor.ft_state = ft_snapshot.ft_state;
       }
     }
@@ -206,6 +321,11 @@ int main(int argc, char ** argv)
     status.task_completed = latest_status.task_completed;
 
     fsm_interface->run_fsm();
+
+    if (system_state.gripper.present) {
+      gripper_io.pos_cmd.store(system_state.gripper.pos_cmd[0], std::memory_order_relaxed);
+      gripper_io.to_control_gripper.store(system_state.gripper.to_control_gripper, std::memory_order_relaxed);
+    }
 
     DebugSample debug_sample;
     if (fsm_interface->getLatestDebugSample(debug_sample) &&
@@ -251,7 +371,7 @@ int main(int argc, char ** argv)
           (current_state >= 0 && current_state < NUM_STATES)
             ? states[current_state].name
             : "UNKNOWN";
-        LOG_INFO(node, "Current FSM state: %s (%d)", state_name, current_state);
+        LOG_INFO(node, "[Current FSM state]: %s (%d)", state_name, current_state);
 
       // log FT sensor state
       if (system_state.ft_sensor.present) {
@@ -290,6 +410,11 @@ int main(int argc, char ** argv)
     ft_reader_thread.join();
   }
 
+  gripper_reader_stop.store(true);
+  if (gripper_reader_thread.joinable()) {
+    gripper_reader_thread.join();
+  }
+
   if (fsm_interface->is_in_comm_with_hw() == true) {
     if (system_state.ft_sensor.present) {
       std::cout << "Stopping FT sensor..." << std::endl;
@@ -298,7 +423,7 @@ int main(int argc, char ** argv)
     }
     if (system_state.gripper.present) {
       std::cout << "Stopping gripper..." << std::endl;
-      robif2b_kg3_robotiq_gripper_stop(&gripper);
+      // TODO: check how to do it here
     }
     std::cout << "Shutting down arm..." << std::endl;
     robif2b_kinova_gen3_stop(&arm);

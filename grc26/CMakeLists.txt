@@ -25,6 +25,10 @@ find_package(orocos_kdl REQUIRED)
 find_package(coord2b REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(unique_identifier_msgs REQUIRED)
+find_package(hardware_interface REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(serial REQUIRED)
+find_package(robotiq_driver REQUIRED)
 
 include_directories(
   include
@@ -54,6 +58,7 @@ add_executable(kinova_single_arm_demo
                 src/action_server_node.cpp
                 src/arm_kdl_model.cpp
                 src/arm_kinematics.cpp
+                src/command_line_utility.cpp
                 src/compute_controller_command.cpp
                 src/controller_config.cpp
                 src/debug_state_node.cpp
@@ -74,6 +79,10 @@ target_compile_features(kinova_single_arm_demo PUBLIC c_std_99 cxx_std_17)  # Re
 ament_target_dependencies(kinova_single_arm_demo
   rclcpp
   rclcpp_action
+  rclcpp_lifecycle
+  serial
+  pluginlib
+  hardware_interface
   ament_index_cpp
   std_msgs
   sensor_msgs
@@ -85,6 +94,7 @@ ament_target_dependencies(kinova_single_arm_demo
 target_link_libraries(kinova_single_arm_demo
   robif2b::kinova_gen3
   robif2b::robotiq_ft_sensor
+  robotiq_driver::robotiq_driver
   coord2b
   yaml-cpp
   ${orocos_kdl_LIBRARIES}

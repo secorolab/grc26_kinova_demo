@@ -227,7 +227,7 @@ void FSMInterface::avoid_joint_limits(SystemState& system_state)
   }
 }
 
-void FSMInterface::check_post_condition(events *eventData, const SystemState& system_state, const TaskSpec& task_spec)
+void FSMInterface::check_post_condition(events *eventData, SystemState& system_state, const TaskSpec& task_spec)
 {
   if (!task_spec.post_condition.available)
     return;
@@ -325,9 +325,19 @@ void FSMInterface::check_post_condition(events *eventData, const SystemState& sy
       task_status.task_completed = false;
       task_status.is_pick_end = true;
       task_status.is_place_start = true;
-      printf("Completed grasp object behavior\n");
-      if (system_state.gripper.present) {
-        produce_event(eventData, E_ENTER_IDLE);
+
+      if (!system_state.gripper.gripper_control_completed) {
+        printf("Gripper command in progress: target position = %6.2f\n", task_spec.gripper.position);
+        printf("Though post condition is met, waiting for gripper command to complete before proceeding\n");
+      }
+      else
+      {
+        system_state.gripper.to_control_gripper = false;
+        printf("Completed grasp object behavior\n");
+        if (system_state.gripper.present) {
+          // produce_event(eventData, E_ENTER_IDLE);
+          produce_event(eventData, E_M_COLLABORATE_CONFIG);
+        }
       }
     }
     else if (fsm_execution_state == S_M_COLLABORATE){

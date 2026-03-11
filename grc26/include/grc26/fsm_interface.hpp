@@ -12,6 +12,7 @@
 #include <array>
 #include <filesystem>
 #include <atomic>
+#include <cstdint>
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -60,8 +61,7 @@ class FSMInterface
 {
 public:
   explicit FSMInterface(SystemState& system_state,
-                          robif2b_kinova_gen3_nbx& rob, 
-                          robif2b_kg3_robotiq_gripper_nbx& gripper,
+                          robif2b_kinova_gen3_nbx& rob,
                           robif2b_robotiq_ft_nbx& ft_sensor,
                           TaskStatusData& status);
   ~FSMInterface();
@@ -80,7 +80,7 @@ public:
   void grasp_object_behavior_config(events *eventData, SystemState& system_state);
   void collaborate_behavior_config(events *eventData, SystemState& system_state);
   void release_object_behavior_config(events *eventData, SystemState& system_state);
-  void check_post_condition(events *eventData, const SystemState& system_state, const TaskSpec& task_spec);
+  void check_post_condition(events *eventData, SystemState& system_state, const TaskSpec& task_spec);
   void exit(events *eventData, SystemState& system_state);
   void avoid_joint_limits(SystemState& system_state);
 
@@ -105,7 +105,6 @@ public:
 private:
   SystemState& system_state;
   robif2b_kinova_gen3_nbx& rob;
-  robif2b_kg3_robotiq_gripper_nbx& gripper;
   robif2b_robotiq_ft_nbx& ft_sensor;
   TaskStatusData& task_status;
   TaskSpec task_spec;
@@ -132,6 +131,7 @@ private:
   int loss_of_interaction_detection_counter_limit = 2000;
   int interaction_counter = 0;
   double placement_threshold = 0.05; // m
+  double weight_of_tray = 12.0; // N
 
   bool in_comm_with_hw;
   e_states fsm_execution_state;

@@ -35,7 +35,6 @@ void bindRobotiqGripper(
     gripper.gripper_pos_cmd = &state.gripper.pos_cmd[0];
     gripper.gripper_vel_cmd = &state.gripper.vel_cmd[0];
     gripper.gripper_frc_cmd = &state.gripper.frc_cmd[0];
-    gripper.success = &state.gripper.success;
 }
 
 void bindRobotiqFT(

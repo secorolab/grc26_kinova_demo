@@ -5,6 +5,7 @@
 #include <optional>
 #include <cstdint>
 #include <chrono>
+#include <atomic>
 #include "robif2b/functions/kinova_gen3.h"
 #include "robif2b/functions/robotiq_ft_sensor.h"
 
@@ -55,8 +56,14 @@ struct SystemState
     float pos_cmd[1] = { 0.0 };
     float vel_cmd[1] = { 0.0 };
     float frc_cmd[1] = { 0.0 };
-    bool success = false;
+    bool to_control_gripper = false;
+    bool is_gripper_moving = false;
+    bool gripper_control_completed = false;
     bool present = false;
+    static constexpr const char* kComPort = "/dev/ttyUSB0";
+    static constexpr int kBaudRate = 115200;
+    static constexpr double kTimeout = 1.0;
+    static constexpr int kSlaveAddress = 0x09;
   } gripper;
 
   struct FTData
@@ -111,4 +118,15 @@ struct FTIOBuffer
   robif2b_robotiq_ft_state ft_state = ROBIF2B_ROBOTIQ_FT_STATE_INIT;
 };
 
+struct GripperIOBuffer
+{
+  std::atomic<float> pos_cmd{0.0f};
+  std::atomic<float> pos_msr{0.0f};
+  std::atomic<float> vel_msr{0.0f};
+  std::atomic<float> cur_msr{0.0f};
+  std::atomic<bool> to_control_gripper{false};
+  std::atomic<bool> is_gripper_moving{false};
+  std::atomic<bool> gripper_control_completed{false};
+  std::atomic<bool> success{false};
+};
 #endif // SYSTEM_STATE_HPP
